@@ -268,7 +268,7 @@ function stepProvinces(S, map) {
     if (pop > 8000 && rng.next() < 0.00035 && S.religions.length < 60) {
       const rl = newReligion(S, rng, P.cult[p], p, S.year); P.rel[p] = rl; addLog(S, `${S.provName[p] || '이름 없는 땅'}에서 새로운 신앙 '${S.religions[rl].name}'이(가) 일어났습니다.`, 2, p, own);
     }
-    if (own < 0 && pop > 900 * (1 + t) && P.cult[p] >= 0 && rng.next() < 0.004 * Math.min(1, t + 0.4) && !o.land.some((q) => P.owner[q] >= 0)) {
+    if (own < 0 && pop > 900 * (1 + t) && P.cult[p] >= 0 && rng.next() < 0.0012 * Math.min(1, t + 0.4) && !o.land.some((q) => P.owner[q] >= 0)) {
       const n = newNation(S, map, p, null, P.cult[p], P.tech[p]); P.owner[p] = n.id; n.gov = '부족 연맹'; n.stab = 0.65; S.cityName[p] ||= genName(S.cultures[P.cult[p]].lang, rng, 'city');
       for (const q of o.land) if (P.owner[q] < 0 && P.pop[q] > 40 && P.cult[q] === P.cult[p]) P.owner[q] = n.id;
       addLog(S, `${S.provName[p] || '한 땅'}에서 새로운 세력 ${n.name}이(가) 일어났습니다.`, 2, p, n.id);
@@ -294,7 +294,7 @@ function stepNations(S, map) {
       const o = prv[p]; const d = Math.hypot(o.x - cap.x, o.y - cap.y) / 160;
       let u = P.unrest[p] + (P.cult[p] !== n.cult ? 0.010 : -0.008) + d * 0.0012 + (n.stab < 0.4 ? 0.012 : -0.004) + (P.plague[p] ? 0.01 : 0);
       P.unrest[p] = u = clamp(u, 0, 1);
-      if (u > 0.992 && n.pc > 1 && p !== n.cap && P.pop[p] > 30) revolt(S, map, p, n);
+      if (u > 0.985 && rng.next() < 0.08 && n.pc > 1 && p !== n.cap && P.pop[p] > 30) revolt(S, map, p, n);
     }
     const capN = 6 + n.tech * 5 + (n.lead.exp > 1.2 ? 3 : 0);
     if (n.pc < capN && n.stab > 0.3 && rng.next() < 0.11 * (0.5 + n.lead.exp)) expand(S, map, n);
