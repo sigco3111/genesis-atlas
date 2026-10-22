@@ -58,4 +58,9 @@ select,input{background:#12304d;border:1px solid #35597f;border-radius:8px;paddi
 #track .tbtns{display:flex;gap:6px;margin-top:8px}
 #track .tbtns button{flex:1;padding:5px 4px;font-size:12px}
 #track canvas{width:100%;height:40px;background:#0b2036;border-radius:6px;margin-top:6px}
-@media(max-width:760px){#track{top:58px;left:8px;width:212px;font-size:12px}}
+#track .thead{cursor:pointer}
+#track.folded{width:auto;padding:6px 10px}
+#track.folded .thead{margin:0;font-size:13px}
+#track.folded .thead span{font-size:12px}
+@media(max-width:760px){#track{top:106px;left:8px;width:212px;font-size:12px}
+#track.folded{top:106px;width:auto}}

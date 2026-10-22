@@ -205,6 +205,8 @@ function renderPanel(auto) {
 }
 // ---------- 국가 추적 카드 ----------
 let trackSig = '';
+let trackFold = false;
+try { trackFold = localStorage.getItem('genesis-atlas-trackfold') === '1'; } catch (e) {}
 function setTracking(id) {
   if (id == null || (S.track && S.track.id === id)) S.track = null; else sim.setTrack(S, id);
   R.trackId = S.track ? S.track.id : -1;
@@ -224,6 +226,14 @@ function renderTrack() {
   const sig = [n.alive, Math.round(n.pop), n.pc, Math.round(n.stab * 100), wars.length, news.length ? news[0].y + news[0].t : '', T.gained, T.lost, T.dead].join('|');
   if (sig === trackSig) return; trackSig = sig;
   let h = `<div class="thead"><i style="color:rgb(${n.rgb})">■</i><b>${n.name}</b><span>${n.gov}</span></div>`;
+  if (trackFold) {
+    h = `<div class="thead"><i style="color:rgb(${n.rgb})">■</i><b>${n.name}</b><span>${n.alive ? numStr(n.pop) : '멸망'} ▾</span></div>`;
+    el.classList.add('folded');
+    el.innerHTML = h;
+    el.querySelector('.thead').onclick = () => { trackFold = false; try { localStorage.setItem('genesis-atlas-trackfold', '0'); } catch (e) {} trackSig = ''; renderTrack(); };
+    return;
+  }
+  el.classList.remove('folded');
   if (!n.alive) {
     h += `<div class="tdead">${yearStr(n.died)} 멸망 · 존속 ${Math.max(1, n.died - n.born)}년</div>`;
     h += `<div class="trow">최대 인구 ${numStr(n.peakPop)} · 최대 지방 ${n.peakPc}</div>`;
@@ -239,6 +249,8 @@ function renderTrack() {
   if (news.length) h += '<div class="tnews">' + news.map((l) => `<div>${yearStr(l.y)} · ${l.t}</div>`).join('') + '</div>';
   h += '<div class="tbtns"><button id="tFocus">지도에서 보기</button><button id="tOff">추적 해제</button></div>';
   el.innerHTML = h;
+  el.querySelector('.thead').onclick = () => { trackFold = true; try { localStorage.setItem('genesis-atlas-trackfold', '1'); } catch (e) {} trackSig = ''; renderTrack(); };
+  el.querySelector('.thead').title = '눌러서 접기';
   $('tFocus').onclick = () => { if (n.cap >= 0 && map.provinces[n.cap]) { R.focus(n.cap, 4); R.sel = n.cap; R.paintHL(); needRefresh = true; } };
   $('tOff').onclick = () => setTracking(null);
   const c = $('tspark').getContext('2d'); const hs = T.hist;
