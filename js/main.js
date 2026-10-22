@@ -1,0 +1,151 @@
+import { generateMap, MAP_KINDS, buildEarth, W, H } from './world.js';
+import { Renderer } from './render.js';
+import * as sim from './sim.js';
+import { yearStr, numStr, ERA_NAMES } from './names.js';
+const $ = (id) => document.getElementById(id);
+const SAVE = 'genesis-atlas-save-v1';
+let map = null, S = null, R = null, running = false, speed = 5, acc = 0, last = 0, tab = 'world', lastRefresh = 0, needRefresh = true, earthCache = null;
+const SPEEDS = [[0, '⏸'], [1, '1'], [5, '5'], [20, '20'], [100, '100'], [500, '500']];
+const MODES = [['political', '정치'], ['culture', '문화'], ['religion', '종교'], ['pop', '인구'], ['tech', '기술'], ['unrest', '불안'], ['terrain', '지형']];
+
+function toast(t) { const e = $('toast'); e.textContent = t; e.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => e.classList.remove('show'), 2400); }
+async function loadImg(url) {
+  const b = await (await fetch(url)).blob(); const bm = await createImageBitmap(b);
+  const c = document.createElement('canvas'); c.width = bm.width; c.height = bm.height; const x = c.getContext('2d', { willReadFrequently: true });
+  x.drawImage(bm, 0, 0); return x.getImageData(0, 0, c.width, c.height).data;
+}
+async function getEarth() {
+  if (earthCache) return earthCache;
+  const [meta, elev, prov] = await Promise.all([fetch('data/earth.json').then((r) => r.json()), loadImg('data/earth_elev.png'), loadImg('data/earth_prov.png')]);
+  earthCache = buildEarth(elev, prov, meta); return earthCache;
+}
+async function getPlaces() { try { return await (await fetch('data/places.json')).json(); } catch (e) { return []; } }
+async function getMap(kind, seed) { return kind === 'earth' ? await getEarth() : generateMap(kind, seed); }
+
+// ---------- 시작 화면 ----------
+for (const k of MAP_KINDS) { const o = document.createElement('option'); o.value = k.id; o.textContent = k.name + (k.desc ? ' - ' + k.desc : ''); $('selMap').appendChild(o); }
+function syncMode() { const earth = $('selMap').value === 'earth'; $('selMode').querySelector('[value=real]').disabled = !earth; if (!earth) $('selMode').value = 'emergent'; }
+$('selMap').onchange = syncMode; syncMode();
+if (localStorage.getItem(SAVE)) $('cont').classList.remove('hide');
+$('go').onclick = async () => {
+  $('loadmsg').textContent = '세계를 만드는 중...'; await new Promise((r) => setTimeout(r, 30));
+  try {
+    const kind = $('selMap').value, seed = +$('seed').value || 1, mode = $('selMode').value;
+    map = await getMap(kind, seed);
+    const places = mode === 'real' ? await getPlaces() : [];
+    S = sim.createState(map, { mode, seed, hearths: +$('hearths').value || 6, aggr: +$('aggr').value, places });
+    boot();
+  } catch (e) { $('loadmsg').textContent = '시작 실패: ' + e.message; console.error(e); }
+};
+$('cont').onclick = async () => {
+  $('loadmsg').textContent = '불러오는 중...';
+  try {
+    const s = sim.restore(localStorage.getItem(SAVE)); map = await getMap(s.mapKind, s.seed); S = s;
+    if (S.P.owner.length !== map.provinces.length) throw new Error('저장 데이터가 지도와 맞지 않습니다');
+    sim.step(sim.restore(localStorage.getItem(SAVE)), map); // 부팅 점검
+    boot();
+  } catch (e) { $('loadmsg').textContent = '저장 데이터를 열 수 없어 폐기합니다: ' + e.message; localStorage.removeItem(SAVE); $('cont').classList.add('hide'); }
+};
+function boot() { console.log('boot', S.mode, S.year);
+  $('start').classList.add('hide');
+  R = new Renderer($('map'), map); if (!boot.done) { boot.done = true; bindInput(); window.addEventListener('resize', () => { R.resize(); needRefresh = true; }); requestAnimationFrame(loop); }
+  R.terrainKind = map.kind + map.seed; R.fit(); R.mode = 'political'; R.sel = -1; speed = 5; running = true; needRefresh = true; buildBars(); renderPanel();
+  toast('휠·드래그로 이동, 지역을 눌러 살펴보세요');
+}
+function buildBars() {
+  $('speed').innerHTML = ''; for (const [v, t] of SPEEDS) { const b = document.createElement('button'); b.textContent = t; b.dataset.v = v; b.title = v ? v + '년/초' : '일시정지'; b.onclick = () => { speed = v; markBars(); }; $('speed').appendChild(b); }
+  $('modes').innerHTML = ''; for (const [v, t] of MODES) { const b = document.createElement('button'); b.textContent = t; b.dataset.m = v; b.onclick = () => { R.mode = v; needRefresh = true; markBars(); }; $('modes').appendChild(b); }
+  markBars();
+}
+function markBars() { for (const b of $('speed').children) b.classList.toggle('on', +b.dataset.v === speed); for (const b of $('modes').children) b.classList.toggle('on', b.dataset.m === R.mode); }
+$('menuBtn').onclick = () => $('panel').classList.toggle('open');
+
+// ---------- 루프 ----------
+function loop(t) { if (!loop.n) console.log('loop1'); loop.n = (loop.n || 0) + 1; if (loop.n === 3) console.log('loop3');
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.1, (t - last) / 1000 || 0.016); last = t;
+  if (running && speed > 0 && S) {
+    acc += dt * speed; let n = 0;
+    const budget = performance.now() + 22;
+    while (acc >= 1 && n < 600) { sim.step(S, map); acc -= 1; n++; if (performance.now() > budget) { acc = Math.min(acc, 1); break; } }
+    if (n) needRefresh = true;
+    if (S.auto && n) for (let i = 0; i < Math.min(n, 3); i++) sim.autoGod(S, map);
+    S.mana = Math.min(100, S.mana + dt * 0.6 * Math.min(speed, 20) / 5);
+  }
+  for (const f of S.fxQueue.splice(0)) R.addEffect(f[0], f[1], f[1] === 'war' ? '#ff5050' : f[1] === 'plague' ? '#9be26a' : '#ffd27a');
+  if (needRefresh && t - lastRefresh > 100) { R.refresh(S); lastRefresh = t; needRefresh = false; }
+  R.draw(dt, S);
+  $('year').textContent = yearStr(S.year); $('era').textContent = ERA_NAMES[Math.min(9, Math.floor(S.stats.maxT))];
+  $('spop').textContent = '인구 ' + numStr(S.stats.world); $('snat').textContent = '국가 ' + S.stats.alive; $('swar').textContent = '전쟁 ' + S.wars.length;
+  if (t - (loop.pt || 0) > 800) { loop.pt = t; renderPanel(true); }
+  if (t - (loop.st || 0) > 20000 && running) { loop.st = t; save(); }
+}
+function save() { try { localStorage.setItem(SAVE, sim.serialize(S)); } catch (e) { toast('자동 저장 실패(용량)'); } }
+window.addEventListener('beforeunload', () => { if (S) save(); });
+
+// ---------- 입력 ----------
+function bindInput() {
+  const cv = $('map'); const pts = new Map(); let moved = 0, pd = 0;
+  cv.addEventListener('pointerdown', (e) => { cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); moved = 0; pd = pts.size === 2 ? dist() : 0; });
+  cv.addEventListener('pointermove', (e) => {
+    if (!pts.has(e.pointerId)) { R.hover = R.provAt(e.clientX, e.clientY); return; }
+    const o = pts.get(e.pointerId); const dx = e.clientX - o[0], dy = e.clientY - o[1]; pts.set(e.pointerId, [e.clientX, e.clientY]); moved += Math.abs(dx) + Math.abs(dy);
+    if (pts.size === 1) R.pan(dx, dy); else if (pts.size === 2) { const d = dist(); if (pd) { const m = mid(); R.zoomAt(m[0], m[1], d / pd); } pd = d; }
+  });
+  const up = (e) => { if (pts.has(e.pointerId) && pts.size === 1 && moved < 8) select(R.provAt(e.clientX, e.clientY)); pts.delete(e.pointerId); pd = 0; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', (e) => { pts.delete(e.pointerId); });
+  cv.addEventListener('wheel', (e) => { e.preventDefault(); R.zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+  const dist = () => { const a = [...pts.values()]; return Math.hypot(a[0][0] - a[1][0], a[0][1] - a[1][1]); };
+  const mid = () => { const a = [...pts.values()]; return [(a[0][0] + a[1][0]) / 2, (a[0][1] + a[1][1]) / 2]; };
+  window.addEventListener('keydown', (e) => { if (e.key === ' ') { speed = speed ? 0 : 5; markBars(); e.preventDefault(); } });
+}
+let selPower = null;
+function select(p) {
+  if (p < 0) { R.sel = -1; R.paintHL(); return; }
+  if (selPower) { const r = sim.applyPower(S, map, selPower, p); toast(r.ok ? sim.POWERS[selPower].name + ' 발동' : r.msg); needRefresh = true; if (r.ok) { R.sel = p; R.paintHL(); } return; }
+  R.sel = p; R.paintHL(); tab = 'sel'; $('panel').classList.add('open'); renderPanel();
+}
+
+// ---------- 패널 ----------
+const TABS = [['world', '세계'], ['sel', '선택'], ['log', '연대기'], ['god', '권능'], ['set', '설정']];
+let panelSig = '';
+function kv(k, v) { return `<div class="kv"><span>${k}</span><b>${v}</b></div>`; }
+function renderPanel(auto) {
+  if (!S) return;
+  $('tabs').innerHTML = TABS.map(([k, t]) => `<button data-t="${k}" class="${tab === k ? 'on' : ''}">${t}</button>`).join('');
+  for (const b of $('tabs').children) b.onclick = () => { tab = b.dataset.t; panelSig = ''; renderPanel(); };
+  const body = $('tabBody'); const st = S.stats; let h = '';
+  if (tab === 'world') {
+    h += '<h3>세계 현황</h3>' + kv('시대', ERA_NAMES[Math.min(9, Math.floor(st.maxT))]) + kv('총 인구', numStr(st.world)) + kv('살아있는 국가', st.alive) + kv('진행 중인 전쟁', S.wars.length) + kv('문화 / 종교', S.cultures.length + ' / ' + S.religions.length);
+    h += '<h3>강대국</h3>' + S.nations.filter((n) => n.alive).sort((a, b) => b.pop - a.pop).slice(0, 10).map((n) => `<div class="kv"><span><i style="color:rgb(${n.rgb})">■</i> <a href="#" data-n="${n.id}">${n.name}</a></span><b>${numStr(n.pop)}</b></div>`).join('');
+    h += '<h3>인구 추이</h3><canvas class="spark" id="spark" width="300" height="60"></canvas>';
+  } else if (tab === 'sel') {
+    const p = R.sel; if (p < 0) h = '<p>지도에서 지역을 눌러 보세요.</p>'; else {
+      const o = map.provinces[p], ow = S.P.owner[p]; const n = ow >= 0 ? S.nations[ow] : null;
+      h += `<h3>${S.provName[p] || '무인 지대'}</h3>` + kv('인구', numStr(S.P.pop[p])) + kv('기술', S.P.tech[p].toFixed(2)) + kv('불안', Math.round(S.P.unrest[p] * 100) + '%') + kv('도시', S.cityName[p] || '-') + kv('문화', S.P.cult[p] >= 0 ? S.cultures[S.P.cult[p]].name : '-') + kv('신앙', S.P.rel[p] >= 0 ? S.religions[S.P.rel[p]].name : '-');
+      if (n) h += `<h3>${n.name}</h3>` + kv('정체', n.gov) + kv('지도자', n.lead.name + ' (' + sim.traitText(n.lead) + ')') + kv('인구', numStr(n.pop)) + kv('지방', n.pc) + kv('안정도', Math.round(n.stab * 100) + '%') + kv('건국', yearStr(n.born)) + kv('전적', n.wins + '승 ' + n.losses + '패');
+    }
+  } else if (tab === 'log') {
+    h = '<div class="log">' + S.log.slice(-80).reverse().map((l) => `<div class="i${l.i}">${yearStr(l.y)} · ${l.t}</div>`).join('') + '</div>';
+  } else if (tab === 'god') {
+    h = `<h3>신력 ${Math.floor(S.mana)}/100</h3><div class="bar"><i style="width:${S.mana}%"></i></div><p>권능을 고른 뒤 지도의 지역을 누르세요.</p>` + Object.entries(sim.POWERS).map(([k, v]) => `<button class="pw ${selPower === k ? 'on' : ''}" data-p="${k}">${v.name} (${v.cost})<small>${v.desc}</small></button>`).join('');
+    h += `<button class="pw ${S.auto ? 'on' : ''}" id="autoBtn">자동 신 위임: ${S.auto ? '켜짐' : '꺼짐'}<small>신이 알아서 균형을 맞춥니다.</small></button>`;
+  } else {
+    h = '<h3>설정</h3><button class="pw" id="bSave">지금 저장</button><button class="pw" id="bExp">파일로 내보내기</button><button class="pw" id="bImp">파일에서 불러오기</button><button class="pw" id="bNew">새 세계 시작</button><input type="file" id="fImp" class="hide" accept=".json">';
+    h += '<p class="fine">지도 데이터: Natural Earth (퍼블릭 도메인). 지구 국경은 근사이며 대체 역사입니다.</p>';
+  }
+  const sig = tab + h.length + (tab === 'world' || tab === 'log' ? Math.floor(S.year / 5) : '');
+  if (auto && (sig === panelSig || tab === 'god' && false)) { if (tab === 'god') { const b = body.querySelector('.bar i'); if (b) b.style.width = S.mana + '%'; } return; }
+  panelSig = sig; body.innerHTML = h;
+  for (const a of body.querySelectorAll('[data-n]')) a.onclick = (e) => { e.preventDefault(); const n = S.nations[+a.dataset.n]; R.sel = n.cap; R.paintHL(); R.focus(n.cap, 3); tab = 'sel'; renderPanel(); };
+  for (const b of body.querySelectorAll('[data-p]')) b.onclick = () => { selPower = selPower === b.dataset.p ? null : b.dataset.p; toast(selPower ? '지도에서 대상 지역을 누르세요' : '취소'); panelSig = ''; renderPanel(); };
+  const q = (id) => body.querySelector('#' + id);
+  if (q('autoBtn')) q('autoBtn').onclick = () => { S.auto = !S.auto; panelSig = ''; renderPanel(); };
+  if (q('bSave')) q('bSave').onclick = () => { save(); toast('저장했습니다'); };
+  if (q('bNew')) q('bNew').onclick = () => { running = false; $('start').classList.remove('hide'); };
+  if (q('bExp')) q('bExp').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([sim.serialize(S)], { type: 'application/json' })); a.download = 'genesis-atlas-save.json'; a.click(); };
+  if (q('bImp')) q('bImp').onclick = () => q('fImp').click();
+  if (q('fImp')) q('fImp').onchange = async (e) => { try { localStorage.setItem(SAVE, await e.target.files[0].text()); $('cont').click(); } catch (x) { toast('불러오기 실패'); } };
+  const sp = q('spark'); if (sp) { const c = sp.getContext('2d'), hs = S.hist; c.strokeStyle = '#6db3ff'; c.beginPath(); const mx = Math.max(1, ...hs.map((x) => x.pop)); hs.forEach((x, i) => { const v = x.pop; const X = i / Math.max(1, hs.length - 1) * 300, Y = 58 - v / mx * 54; i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.stroke(); }
+}
+{ const q = new URLSearchParams(location.search); if (q.has('map')) $('selMap').value = q.get('map'); if (q.has('mode')) $('selMode').value = q.get('mode'); if (q.has('auto')) { $('go').click(); window.__skip = +q.get('auto') || 0; if (q.has('speed')) setTimeout(() => { speed = +q.get('speed'); markBars(); }, 0); } }

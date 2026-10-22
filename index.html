@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>태초의 지도 - Genesis Atlas</title>
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<canvas id="map"></canvas>
+<div id="top">
+  <div id="yr"><b id="year">-</b><span id="era"></span></div>
+  <div id="stats"><span id="spop"></span><span id="snat"></span><span id="swar"></span></div>
+  <div id="speed"></div>
+  <div id="modes"></div>
+  <button id="menuBtn" title="패널">☰</button>
+</div>
+<div id="panel"><div id="tabs"></div><div id="tabBody"></div></div>
+<div id="toast"></div>
+<div id="start"><div class="card">
+  <h1>태초의 지도</h1><div class="sub">Genesis Atlas · 끝없이 지켜보는 문명 시뮬레이터</div>
+  <label>지도<select id="selMap"></select></label>
+  <label>시작 방식<select id="selMode"><option value="emergent">태초부터 - 부족에서 문명이 자라납니다</option><option value="real">현재의 세계 - 실제 나라로 시작 (지구 전용)</option></select></label>
+  <div class="row"><label>시드<input id="seed" type="number" value="1"></label><label>씨앗 부족 수<input id="hearths" type="number" min="2" max="14" value="6"></label></div>
+  <label>호전성<select id="aggr"><option value="0.6">평화로움</option><option value="1" selected>보통</option><option value="1.5">호전적</option></select></label>
+  <button id="go" class="primary">시작하기</button>
+  <button id="cont" class="hide">이어하기 (자동 저장)</button>
+  <div id="loadmsg"></div>
+  <p class="fine">지구 경계는 Natural Earth 근사이며 현대 국경과 다를 수 있는 대체 역사입니다.</p>
+</div></div>
+<script type="module" src="js/main.js"></script>
+</body></html>
