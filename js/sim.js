@@ -26,7 +26,7 @@ export function createState(map, opts = {}) {
   const N = map.provinces.length;
   const S = {
     v: VERSION, seed, mapKind: map.kind, mode: opts.mode || 'emergent', year: 0, rng, techRate: opts.techRate ?? 1,
-    P: { pop: new Float32Array(N), tech: new Float32Array(N), owner: new Int16Array(N).fill(-1), cult: new Int16Array(N).fill(-1), rel: new Int16Array(N).fill(-1), unrest: new Float32Array(N), city: new Uint8Array(N), fx: new Float32Array(N).fill(1), plague: new Uint8Array(N) },
+    P: { pop: new Float32Array(N), tech: new Float32Array(N), owner: new Int16Array(N).fill(-1), cult: new Int16Array(N).fill(-1), rel: new Int16Array(N).fill(-1), unrest: new Float32Array(N), city: new Uint8Array(N), fx: new Float32Array(N).fill(1), km: new Float32Array(N).fill(1), plague: new Uint8Array(N) },
     nations: [], cultures: [], religions: [], wars: [], truce: {}, log: [], hist: [], routes: [], cityName: new Array(N).fill(''), provName: new Array(N).fill(''),
     mana: 60, auto: !!opts.auto, aggr: opts.aggr ?? 1, worldFirst: {}, stats: {}, fr: null, nextWar: 1,
     eventsOn: opts.events !== false, deaths: { war: 0, plague: 0, famine: 0 }, fxQueue: [],
@@ -129,7 +129,7 @@ function initReal(S, map, opts) {
     let cx = 0, cy = 0, ca = 0; for (const p of provs) { const o = map.provinces[p]; cx += o.x * o.a; cy += o.y * o.a; ca += o.a; } cx /= ca; cy /= ca;
     provs.forEach((p, k) => {
       const o = map.provinces[p]; P.owner[p] = nid; P.cult[p] = cultOf[ci]; P.rel[p] = S.nations[nid].rel; P.pop[p] = popTot * w[k] / wsum;
-      P.tech[p] = techOf[C[ci].inc] ?? 6.5; P.unrest[p] = 0.05;
+      P.tech[p] = techOf[C[ci].inc] ?? 6.5; P.unrest[p] = 0.05; { const K0 = capacity(S, map, p); P.km[p] = Math.max(1, P.pop[p] * 1.2 / Math.max(1, K0)); }
       if (provs.length === 1) S.provName[p] = C[ci].ko; else { const dx = o.x - cx, dy = o.y - cy; const d = Math.hypot(dx, dy); let dir = '중부'; if (d > 18) { const q = Math.round((Math.atan2(dy, dx) + Math.PI) / (Math.PI / 4)) % 8; dir = ['서부', '남서부', '남부', '남동부', '동부', '북동부', '북부', '북서부'][q]; } S.provName[p] = `${C[ci].ko} ${dir}`; }
     });
   }
@@ -150,7 +150,7 @@ function initReal(S, map, opts) {
 // ---------- 집계 ----------
 export function capacity(S, map, p) {
   const o = map.provinces[p]; const t = S.P.tech[p];
-  return o.a * 0.35 * Math.pow(1.9, t) * o.fert * S.P.fx[p] * (S.P.city[p] ? 1.25 : 1);
+  return o.a * 0.35 * Math.pow(1.9, Math.min(t, 6) + Math.max(0, t - 6) * 0.3) * o.fert * S.P.fx[p] * S.P.km[p] * (S.P.city[p] ? 1.25 : 1);
 }
 export function computeFronts(S, map) {
   const fr = new Map(); const ow = S.P.owner;
@@ -520,7 +520,7 @@ export function autoGod(S, map) {
 }
 
 // ---------- 저장/복원 ----------
-const TYPED = { pop: Float32Array, tech: Float32Array, owner: Int16Array, cult: Int16Array, rel: Int16Array, unrest: Float32Array, city: Uint8Array, fx: Float32Array, plague: Uint8Array };
+const TYPED = { pop: Float32Array, tech: Float32Array, owner: Int16Array, cult: Int16Array, rel: Int16Array, unrest: Float32Array, city: Uint8Array, fx: Float32Array, km: Float32Array, plague: Uint8Array };
 export function serialize(S) {
   const P = {}; for (const k of Object.keys(TYPED)) P[k] = Array.from(S.P[k], (v) => (Number.isInteger(v) ? v : Math.round(v * 1000) / 1000));
   const nations = S.nations.map((n) => { if (!n.alive) return { ...n, relat: {}, allies: [], lead: { ...n.lead } }; const r = {}; for (const k in n.relat) if (S.nations[k] && S.nations[k].alive) r[k] = Math.round(n.relat[k]); return { ...n, relat: r }; });
@@ -529,6 +529,7 @@ export function serialize(S) {
 }
 export function restore(json) {
   const S = typeof json === 'string' ? JSON.parse(json) : json;
+  if (!S.P.km) S.P.km = new Array(S.P.pop.length).fill(1);
   for (const k of Object.keys(TYPED)) S.P[k] = TYPED[k].from(S.P[k]);
   const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1;
   return S;
