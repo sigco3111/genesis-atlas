@@ -72,6 +72,7 @@ export class Renderer {
     this.terrain = bakeTerrain(map);
     this.ov = makeCanvas(TW, TH); this.ovCtx = this.ov.getContext('2d'); this.ovImg = this.ovCtx.createImageData(TW, TH);
     this.hl = makeCanvas(TW, TH); this.hlCtx = this.hl.getContext('2d');
+    this.pvCv = makeCanvas(TW, TH); this.pvCtx = this.pvCv.getContext('2d'); this.pvOn = false; this.pvCenter = null; this.pvColor = '#ffd24a';
     this.cells = buildCellIndex(map);
     // 지방 경계 마스크 (셀 단위로 이웃과 다른 지방)
     this.cam = { x: W / 2, y: H / 2, z: 1 }; this.minZ = 0.5;
@@ -199,6 +200,20 @@ export class Renderer {
     const { start, idx } = this.cells; ctx.fillStyle = 'rgba(255,255,255,0.28)';
     for (let k = start[p]; k < start[p + 1]; k++) { const i = idx[k]; const x = i % W, y = (i / W) | 0; ctx.fillRect(x * 2, y * 2, 2, 2); }
   }
+  setPowerPreview(pv) {
+    const ctx = this.pvCtx; ctx.clearRect(0, 0, TW, TH);
+    this.pvOn = false; this.pvCenter = null;
+    if (!pv || !pv.provs || !pv.provs.length) return;
+    this.pvOn = true; this.pvColor = pv.color || '#ffd24a';
+    const { start, idx } = this.cells; const [r, g, b] = hex(pv.color || '#ffd24a');
+    for (const p of pv.provs) {
+      const strong = p === pv.center;
+      ctx.fillStyle = `rgba(${r},${g},${b},${strong ? 0.5 : 0.28})`;
+      for (let k = start[p]; k < start[p + 1]; k++) { const i = idx[k]; const x = i % W, y = (i / W) | 0; ctx.fillRect(x * 2, y * 2, 2, 2); }
+    }
+    const o = this.map.provinces[pv.center];
+    this.pvCenter = o ? [o.ax, o.ay] : null;
+  }
   addEffect(p, kind, color) { const o = this.map.provinces[p]; this.effects.push({ x: o.ax, y: o.ay, kind, color: color || '#fff', t: 0 }); if (kind === "war" && this.effects.length > 14) return; if (this.effects.length > 30) this.effects.shift(); }
   draw(dt, S) {
     this.time += dt; this.lastDt = Math.min(dt, 0.05); const ctx = this.ctx, c = this.cam, dpr = this.dpr;
@@ -211,6 +226,7 @@ export class Renderer {
     ctx.drawImage(this.terrain, 0, 0);
     if (this.mode !== 'terrain' || true) ctx.drawImage(this.ov, 0, 0);
     if (this.sel >= 0) ctx.drawImage(this.hl, 0, 0);
+    if (this.pvOn) { ctx.globalAlpha = 0.62 + 0.3 * Math.sin(this.time * 5); ctx.drawImage(this.pvCv, 0, 0); ctx.globalAlpha = 1; }
     // 물결 광택
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.drawOverlayVec(ctx, S);
@@ -269,6 +285,19 @@ export class Renderer {
       }
     }
     ctx.globalAlpha = 1; ctx.lineCap = 'butt';
+    // 권능 미리보기 조준 표시
+    if (this.pvOn && this.pvCenter) {
+      const [x, y] = this.w2s(this.pvCenter[0], this.pvCenter[1]);
+      const pu = 0.6 + 0.4 * Math.sin(this.time * 5);
+      const rr = Math.max(9, Math.min(20, 6 * Math.sqrt(z)));
+      ctx.globalAlpha = 0.9; ctx.strokeStyle = this.pvColor; ctx.lineWidth = Math.max(1.6, z * 0.3);
+      ctx.beginPath(); ctx.arc(x, y, rr * (0.9 + 0.15 * pu), 0, 7); ctx.stroke();
+      ctx.lineWidth = Math.max(1.2, z * 0.2);
+      for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+        ctx.beginPath(); ctx.moveTo(x + dx * rr * 1.15, y + dy * rr * 1.15); ctx.lineTo(x + dx * rr * 1.5, y + dy * rr * 1.5); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
     // 도시
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const cityPlaced = []; const cityMin = z > 3 ? 1 : z > 2 ? 2 : z > 1.3 ? 3 : 4;

@@ -504,10 +504,63 @@ export function disaster(S, map, kind, p) {
 }
 
 // ---------- 신의 권능 ----------
+// 권능 대상 범위 미리보기: 유효성, 영향 지방 목록, 예상 효과 문구를 돌려준다 (DOM 없음).
+export function powerArea(S, map, type, p) {
+  if (!POWERS[type]) return { ok: false, msg: '알 수 없는 권능', provs: [] };
+  if (!S.fr) computeFronts(S, map);
+  if (p == null || p < 0 || !map.provinces[p]) return { ok: false, msg: '지도의 육지를 누르세요', provs: [] };
+  const P = S.P, ow = P.owner[p];
+  const near = (map.provinces[p].land || []).filter((q) => q >= 0);
+  const nationProvs = (id) => { const out = []; for (let q = 0; q < P.owner.length; q++) if (P.owner[q] === id) out.push(q); return out; };
+  const noNation = { ok: false, msg: '국가가 있는 땅에서 쓰세요', provs: [p] };
+  switch (type) {
+    case 'bless': return { ok: true, provs: [p, ...near], expect: '땅이 수십 년간 기름져져 인구가 잘 늘어납니다' };
+    case 'drought': return { ok: true, provs: [p, ...near], expect: '대가뭄: 성장 둔화' + (ow >= 0 ? ' · ' + S.nations[ow].name + ' 안정도 하락' : '') };
+    case 'quake': return { ok: true, provs: [p], expect: '인구 약 -18%' + (P.city[p] ? ' · 도시 피해 가능' : '') };
+    case 'volcano': return { ok: true, provs: [p, ...near], expect: '중심 인구 약 -45% · 인접 약 -10% · 이후 비옥해짐' };
+    case 'meteor': return { ok: true, provs: [p, ...near], expect: '중심 인구 약 -80% · 도시 파괴 · 인접 약 -30%' };
+    case 'plague': return P.pop[p] < 10 ? { ok: false, msg: '사람이 살지 않는 곳입니다', provs: [p] } : { ok: true, provs: [p], expect: '역병 발병 · 이웃으로 번질 수 있습니다' };
+    case 'tribe': return (P.pop[p] > 5 || map.provinces[p].fert < 0.05) ? { ok: false, msg: '사람이 없는 비옥한 땅에서만 쓸 수 있습니다', provs: [p] } : { ok: true, provs: [p], expect: '새 부족이 국가를 세웁니다' };
+    case 'prophet': return P.pop[p] < 10 ? { ok: false, msg: '사람이 없는 곳입니다', provs: [p] } : { ok: true, provs: [p, ...near.filter((q) => P.pop[q] > 5)], expect: '새 신앙이 일어나 주변으로 퍼집니다' };
+    case 'hero': return ow < 0 ? noNation : { ok: true, provs: nationProvs(ow), nation: ow, expect: S.nations[ow].name + ' 전체: 안정도 상승 · 불안 감소 · 학문 상승' };
+    case 'revolt': {
+      if (ow < 0) return noNation;
+      const n = S.nations[ow];
+      if (n.pc < 2 || n.cap === p) return { ok: false, msg: '수도나 단일 지방 국가에는 쓸 수 없습니다', provs: [p], nation: ow };
+      return { ok: true, provs: [p], nation: ow, expect: (S.provName[p] || '이 지방') + '의 독립을 부추깁니다' };
+    }
+    case 'peace': {
+      if (ow < 0) return noNation;
+      const ws = S.wars.filter((w) => w.A.includes(ow) || w.D.includes(ow));
+      if (!ws.length) return { ok: false, msg: '전쟁 중이 아닙니다', provs: nationProvs(ow), nation: ow };
+      return { ok: true, provs: nationProvs(ow), nation: ow, expect: S.nations[ow].name + '의 전쟁 ' + ws.length + '건을 끝냅니다' };
+    }
+    case 'war': {
+      if (ow < 0) return noNation;
+      const n = S.nations[ow]; const nb = [...neighborsOf(S, n).keys()];
+      if (!nb.length) return { ok: false, msg: '이웃 국가가 없습니다', provs: nationProvs(ow), nation: ow };
+      return { ok: true, provs: nationProvs(ow), nation: ow, expect: n.name + '이(가) 이웃 ' + nb.length + '개국 중 하나와 전쟁을 시작합니다' };
+    }
+  }
+  return { ok: false, msg: '알 수 없는 권능', provs: [p] };
+}
+
 export function applyPower(S, map, type, p) {
   const pw = POWERS[type]; if (!pw) return { ok: false, msg: '알 수 없는 권능' };
   const P = S.P, ow = P.owner[p]; const nm = S.provName[p] || '이 땅'; let ok = true, msg = '';
   const needNation = () => { if (ow < 0) { ok = false; msg = '국가가 있는 땅에서 쓰세요'; return true; } return false; };
+  if (!S.fr) computeFronts(S, map);
+  // --- 발동 전 스냅샷 (결과 요약용) ---
+  const area = powerArea(S, map, type, p);
+  const provSet = new Set(area.provs && area.provs.length ? area.provs : [p]);
+  provSet.add(p);
+  if (ow >= 0 && (type === 'war' || type === 'peace' || type === 'revolt' || type === 'hero')) for (const q of map.provinces[p].land) provSet.add(q);
+  const natSet = new Set();
+  if (ow >= 0) { natSet.add(ow); for (const [m] of neighborsOf(S, S.nations[ow])) natSet.add(m); }
+  const scanNat = (id) => { let pc = 0, pop = 0; for (let q = 0; q < P.owner.length; q++) if (P.owner[q] === id) { pc++; pop += P.pop[q]; } return { pc, pop }; };
+  const prov0 = new Map(); for (const q of provSet) prov0.set(q, { pop: P.pop[q], city: P.city[q], owner: P.owner[q] });
+  const nat0 = new Map(); for (const id of natSet) if (S.nations[id]) nat0.set(id, { stab: S.nations[id].stab, ...scanNat(id) });
+  const log0 = S.log.length, natCount0 = S.nations.length, wars0 = S.wars.length;
   switch (type) {
     case 'bless': case 'drought': case 'quake': case 'volcano': case 'meteor': disaster(S, map, type, p); break;
     case 'plague': if (P.pop[p] < 10) { ok = false; msg = '사람이 살지 않는 곳입니다'; } else startPlague(S, map, p); break;
@@ -522,7 +575,21 @@ export function applyPower(S, map, type, p) {
     case 'peace': { if (needNation()) break; const ws = S.wars.filter((w) => w.A.includes(ow) || w.D.includes(ow)); if (!ws.length) { ok = false; msg = '전쟁 중이 아닙니다'; break; } for (const w of ws) endWar(S, map, w, ''); addLog(S, `평화의 신탁이 내려 ${S.nations[ow].name}의 전쟁이 멈췄습니다.`, 2, p, ow); break; }
     case 'war': { if (needNation()) break; const n = S.nations[ow]; const nb = [...neighborsOf(S, n).keys()]; if (!nb.length) { ok = false; msg = '이웃 국가가 없습니다'; break; } const m = S.nations[S.rng.pick(nb)]; n.relat[m.id] = -90; m.relat[n.id] = -90; delete S.truce[tkey(n.id, m.id)]; startWar(S, map, n, m, '(신의 속삭임)'); break; }
   }
-  return { ok, msg };
+  // --- 발동 후 차이 계산 ---
+  const diff = { provs: [], popLost: 0, popGained: 0, citiesLost: 0, nations: [], events: [], warsDelta: S.wars.length - wars0 };
+  for (const [q, b] of prov0) {
+    const d = { p: q, name: S.provName[q] || '', pop0: Math.round(b.pop), pop1: Math.round(P.pop[q]), city0: b.city, city1: P.city[q], owner0: b.owner, owner1: P.owner[q] };
+    if (d.pop1 < d.pop0) diff.popLost += d.pop0 - d.pop1; else diff.popGained += d.pop1 - d.pop0;
+    if (d.city1 < d.city0) diff.citiesLost += d.city0 - d.city1;
+    if (d.pop1 !== d.pop0 || d.city1 !== d.city0 || d.owner1 !== d.owner0) diff.provs.push(d);
+  }
+  for (const [id, b] of nat0) {
+    const n = S.nations[id]; if (!n) continue; const now = scanNat(id);
+    if (n.stab !== b.stab || now.pc !== b.pc || Math.abs(now.pop - b.pop) > Math.max(50, b.pop * 0.01)) diff.nations.push({ id, name: n.name, stab0: b.stab, stab1: n.stab, pc0: b.pc, pc1: now.pc, pop0: Math.round(b.pop), pop1: Math.round(now.pop) });
+  }
+  for (let i = log0; i < S.log.length; i++) diff.events.push(S.log[i].t);
+  if (S.nations.length > natCount0) diff.newNation = S.nations[S.nations.length - 1].name;
+  return { ok, msg, diff };
 }
 
 export function autoGod(S, map) {

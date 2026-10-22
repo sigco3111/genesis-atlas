@@ -129,7 +129,7 @@ function loop(t) { if (!loop.n) console.log('loop1'); loop.n = (loop.n || 0) + 1
   if (S.log.length) { const lg = S.log; let i = lg.length - 1; while (i >= 0 && lg[i] !== loop.lastLog) i--; const fresh = i < 0 ? lg.slice(-1) : lg.slice(i + 1); loop.lastLog = lg[lg.length - 1];
     if (speed <= 100 && t - (loop.tt || 0) > 2500) { const big = fresh.filter((l) => l.i >= 3).pop(); if (big) { loop.tt = t; toast(yearStr(big.y) + ' · ' + big.t); } } }
   if (needRefresh && t - lastRefresh > 100) { R.refresh(S); lastRefresh = t; needRefresh = false; }
-  { const c = R.cam; const key = c.x + '|' + c.y + '|' + c.z + '|' + R.sel + '|' + R.mode + '|' + R.cssW + R.cssH + '|' + lastRefresh; if (speed > 0 || R.effects.length || key !== loop.dk || R.fresh) { R.draw(dt, S); loop.dk = key; R.fresh = false; } }
+  { const c = R.cam; const key = c.x + '|' + c.y + '|' + c.z + '|' + R.sel + '|' + R.mode + '|' + R.cssW + R.cssH + '|' + lastRefresh; if (speed > 0 || R.effects.length || R.pvOn || key !== loop.dk || R.fresh) { R.draw(dt, S); loop.dk = key; R.fresh = false; } }
   $('year').textContent = yearStr(S.year); $('era').textContent = ERA_NAMES[Math.min(9, Math.floor(S.stats.maxT))];
   $('spop').textContent = '인구 ' + numStr(S.stats.world); $('snat').textContent = '국가 ' + S.stats.alive; $('swar').textContent = '전쟁 ' + S.wars.length;
   if (t - (loop.pt || 0) > 800) { loop.pt = t; renderPanel(true); renderTrack(); }
@@ -152,9 +152,10 @@ async function save() { if (saving || !S) return; saving = true; try { const t =
 // ---------- 입력 ----------
 function bindInput() {
   const cv = $('map'); const pts = new Map(); let moved = 0, pd = 0;
-  cv.addEventListener('pointerdown', (e) => { cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); moved = 0; pd = pts.size === 2 ? dist() : 0; });
+  cv.addEventListener('pointerdown', (e) => { lastPtr = e.pointerType || 'mouse'; cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); moved = 0; pd = pts.size === 2 ? dist() : 0; });
+  cv.addEventListener('pointerleave', () => { if (selPower && !pwPending) { R.setPowerPreview(null); $('pwhint').classList.add('hide'); } });
   cv.addEventListener('pointermove', (e) => {
-    if (!pts.has(e.pointerId)) { R.hover = R.provAt(e.clientX, e.clientY); return; }
+    if (!pts.has(e.pointerId)) { R.hover = R.provAt(e.clientX, e.clientY); if (selPower) updatePowerPreview(R.hover); return; }
     const o = pts.get(e.pointerId); const dx = e.clientX - o[0], dy = e.clientY - o[1]; pts.set(e.pointerId, [e.clientX, e.clientY]); moved += Math.abs(dx) + Math.abs(dy);
     if (pts.size === 1) R.pan(dx, dy); else if (pts.size === 2) { const d = dist(); if (pd) { const m = mid(); R.zoomAt(m[0], m[1], d / pd); } pd = d; }
   });
@@ -166,9 +167,64 @@ function bindInput() {
   window.addEventListener('keydown', (e) => { if (e.key === ' ') { speed = speed ? 0 : prevSpeed; markBars(); e.preventDefault(); } });
 }
 let selPower = null;
+// ---------- 권능 미리보기 / 결과 요약 ----------
+const PW_GOOD = new Set(['bless', 'tribe', 'prophet', 'hero', 'peace']);
+const PW_ICON = { bless: '🌧', drought: '🏜', plague: '☠', quake: '💥', volcano: '🌋', meteor: '☄', tribe: '🛖', prophet: '📿', hero: '⭐', revolt: '🔥', peace: '🕊', war: '⚔' };
+let pwPending = null, lastPtr = 'mouse';
+function powerColor(type, ok) { return !ok ? '#9aa7b5' : PW_GOOD.has(type) ? '#7fe08a' : '#ff6a55'; }
+function updatePowerPreview(p) {
+  const hint = $('pwhint');
+  if (!selPower || p == null || p < 0) { R.setPowerPreview(null); hint.classList.add('hide'); return; }
+  const a = sim.powerArea(S, map, selPower, p);
+  R.setPowerPreview({ center: p, provs: a.provs, color: powerColor(selPower, a.ok) });
+  const nm = S.provName[p] || '이름 없는 땅';
+  const scope = a.nation != null ? S.nations[a.nation].name + ' 전체 (' + a.provs.length + '지방)' : a.provs.length > 1 ? '중심+인접 ' + a.provs.length + '곳' : '1개 지방';
+  let h = `<b>${PW_ICON[selPower] || ''} ${sim.POWERS[selPower].name}</b> → ${nm}`;
+  h += a.ok ? `<div class="okln">${scope} · ${a.expect}</div>` : `<div class="badln">${a.msg}</div>`;
+  if (pwPending && pwPending.p === p && pwPending.type === selPower) h += '<div class="acts"><button id="pwGo">여기에 발동</button><button id="pwNo">취소</button></div>';
+  hint.innerHTML = h; hint.classList.remove('hide');
+  const go = hint.querySelector('#pwGo'); if (go) go.onclick = () => firePower(selPower, p);
+  const no = hint.querySelector('#pwNo'); if (no) no.onclick = () => { pwPending = null; R.setPowerPreview(null); hint.classList.add('hide'); };
+}
+function firePower(type, p) {
+  const r = sim.applyPower(S, map, type, p);
+  if (!r.ok) { toast(r.msg); pwPending = null; updatePowerPreview(p); return; }
+  pwPending = null; R.setPowerPreview(null); $('pwhint').classList.add('hide');
+  toast((PW_ICON[type] || '') + ' ' + sim.POWERS[type].name + ' 발동');
+  showPowerResult(type, p, r.diff);
+  needRefresh = true; R.sel = p; R.paintHL();
+}
+function showPowerResult(type, p, d) {
+  const el = $('pwres'); if (!d) { el.classList.add('hide'); return; }
+  const nm = S.provName[p] || '';
+  let h = `<div class="prhead">${PW_ICON[type] || ''} ${sim.POWERS[type].name} 결과${nm ? ' — ' + nm : ''}</div>`;
+  const lines = [];
+  const ctr = d.provs.find((x) => x.p === p);
+  if (ctr && ctr.pop1 !== ctr.pop0) { const dp = ctr.pop1 - ctr.pop0; lines.push(`인구 ${numStr(ctr.pop0)} → ${numStr(ctr.pop1)} <em class="${dp > 0 ? 'up' : 'down'}">(${dp > 0 ? '+' : ''}${numStr(dp)})</em>`); }
+  const nearLost = d.popLost - (ctr && ctr.pop1 < ctr.pop0 ? ctr.pop0 - ctr.pop1 : 0);
+  if (nearLost > 0) lines.push(`주변 인구 <em class="down">-${numStr(Math.round(nearLost))}</em>`);
+  else if (!ctr && d.popLost > 0) lines.push(`인구 <em class="down">-${numStr(Math.round(d.popLost))}</em>`);
+  if (d.popGained > 0 && !(ctr && ctr.pop1 > ctr.pop0)) lines.push(`인구 <em class="up">+${numStr(Math.round(d.popGained))}</em>`);
+  if (d.citiesLost > 0) lines.push(`도시 ${d.citiesLost}곳 파괴`);
+  for (const n of d.nations.slice(0, 2)) {
+    const bits = [];
+    if (Math.round(n.stab0 * 100) !== Math.round(n.stab1 * 100)) bits.push(`안정도 ${Math.round(n.stab0 * 100)}% → ${Math.round(n.stab1 * 100)}%`);
+    if (n.pc0 !== n.pc1) bits.push(`지방 ${n.pc0} → ${n.pc1}`);
+    if (bits.length) lines.push(`${n.name}: ${bits.join(' · ')}`);
+  }
+  for (const e of d.events.slice(0, type === 'peace' || type === 'war' ? 3 : 1)) lines.push(`<em>${e}</em>`);
+  if (!lines.length) lines.push('눈에 띄는 즉각 변화는 없습니다');
+  el.innerHTML = h + lines.slice(0, 6).map((l) => `<div class="prline">${l}</div>`).join('');
+  el.classList.remove('hide');
+  clearTimeout(showPowerResult.t); showPowerResult.t = setTimeout(() => el.classList.add('hide'), 8000);
+  el.onclick = () => el.classList.add('hide');
+}
 function select(p) {
   if (p < 0) { R.sel = -1; R.paintHL(); return; }
-  if (selPower) { const r = sim.applyPower(S, map, selPower, p); toast(r.ok ? sim.POWERS[selPower].name + ' 발동' : r.msg); needRefresh = true; if (r.ok) { R.sel = p; R.paintHL(); } return; }
+  if (selPower) {
+    if (lastPtr === 'touch' && (!pwPending || pwPending.p !== p || pwPending.type !== selPower)) { pwPending = { type: selPower, p }; updatePowerPreview(p); return; }
+    firePower(selPower, p); return;
+  }
   R.sel = p; R.paintHL(); tab = 'sel'; setPanelOpen(true); renderPanel();
 }
 
@@ -196,7 +252,7 @@ function renderPanel(auto) {
   } else if (tab === 'log') {
     h = '<div class="log">' + S.log.slice(-80).reverse().map((l) => `<div class="i${l.i}">${yearStr(l.y)} · ${l.t}</div>`).join('') + '</div>';
   } else if (tab === 'god') {
-    h = '<h3>신의 권능</h3><p>권능을 고른 뒤 지도의 지역을 누르세요. 횟수 제한 없이 얼마든지 쓸 수 있습니다.</p>' + Object.entries(sim.POWERS).map(([k, v]) => `<button class="pw ${selPower === k ? 'on' : ''}" data-p="${k}">${v.name}<small>${v.desc}</small></button>`).join('');
+    h = '<h3>신의 권능</h3><p>권능을 고르면 지도에 영향 범위와 예상 효과가 미리 보입니다. 지역을 눌러 발동하면 실제 변화를 요약해 보여 줍니다.</p>' + Object.entries(sim.POWERS).map(([k, v]) => `<button class="pw ${selPower === k ? 'on' : ''}" data-p="${k}">${v.name}<small>${v.desc}</small></button>`).join('');
     h += `<button class="pw ${S.auto ? 'on' : ''}" id="autoBtn">자동 신 위임: ${S.auto ? '켜짐' : '꺼짐'}<small>신이 알아서 균형을 맞춥니다.</small></button>`;
   } else {
     h = '<h3>도움말</h3><p class="fine">드래그로 이동, 휠/핀치로 확대. 지역을 누르면 정보가 나옵니다. 위쪽 버튼으로 속도와 지도 모드를 바꾸고, 권능 탭에서 신의 힘을 쓰거나 자동 신 위임을 켜 보세요. 아무것도 하지 않아도 세계는 계속 흘러갑니다.</p><h3>설정</h3><button class="pw" id="bSave">지금 저장</button><button class="pw" id="bExp">파일로 내보내기</button><button class="pw" id="bImp">파일에서 불러오기</button><button class="pw" id="bNew">새 세계 시작</button><input type="file" id="fImp" class="hide" accept=".json">';
@@ -208,7 +264,7 @@ function renderPanel(auto) {
   for (const a of body.querySelectorAll('[data-n]')) a.onclick = (e) => { e.preventDefault(); const n = S.nations[+a.dataset.n]; R.sel = n.cap; R.paintHL(); R.focus(n.cap, 3); tab = 'sel'; renderPanel(); };
   for (const a of body.querySelectorAll('[data-w]')) a.onclick = (e) => { e.preventDefault(); setTracking(+a.dataset.w); };
   for (const b of body.querySelectorAll('[data-trk]')) b.onclick = () => setTracking(+b.dataset.trk);
-  for (const b of body.querySelectorAll('[data-p]')) b.onclick = () => { selPower = selPower === b.dataset.p ? null : b.dataset.p; toast(selPower ? '지도에서 대상 지역을 누르세요' : '취소'); panelSig = ''; renderPanel(); };
+  for (const b of body.querySelectorAll('[data-p]')) b.onclick = () => { selPower = selPower === b.dataset.p ? null : b.dataset.p; pwPending = null; if (!selPower) { R.setPowerPreview(null); $('pwhint').classList.add('hide'); } toast(selPower ? '지도에 영향 범위가 보입니다. 대상 지역을 누르세요' : '취소'); panelSig = ''; renderPanel(); };
   const q = (id) => body.querySelector('#' + id);
   if (q('autoBtn')) q('autoBtn').onclick = () => { S.auto = !S.auto; panelSig = ''; renderPanel(); };
   if (q('bSave')) q('bSave').onclick = () => { save(); toast('저장했습니다'); };

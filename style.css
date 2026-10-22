@@ -67,3 +67,17 @@ select,input{background:#12304d;border:1px solid #35597f;border-radius:8px;paddi
 #track .twar{cursor:pointer}
 #track .twar:hover{text-decoration:underline}
 #swar{cursor:pointer}
+/* v27 권능 미리보기/결과 */
+#pwhint{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#0a1a2bee;border:1px solid #3a5f86;border-radius:12px;padding:8px 14px;z-index:6;font-size:13px;max-width:92vw;text-align:center;box-shadow:0 4px 16px #0008}
+#pwhint b{color:#ffd27a}
+#pwhint .okln{color:#bfe8c8;padding-top:2px}
+#pwhint .badln{color:#ff9a8a;padding-top:2px}
+#pwhint .acts{display:flex;gap:8px;margin-top:7px;justify-content:center}
+#pwhint .acts button{padding:6px 16px;font-weight:600}
+#pwhint .acts button#pwGo{background:#3b7bc4;border-color:#8cc0ff}
+#pwres{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#0a1a2bf2;border:1px solid #4d7fb3;border-radius:12px;padding:10px 16px;z-index:6;font-size:13px;max-width:92vw;box-shadow:0 4px 18px #000a;cursor:pointer}
+#pwres .prhead{font-weight:700;color:#ffd27a;margin-bottom:3px}
+#pwres .prline{color:#cfe3ff;padding:1px 0}
+#pwres .prline em{font-style:normal;color:#9bb3cc}
+#pwres .up{color:#8fe08f}#pwres .down{color:#ff9a8a}
+@media(max-width:760px){#pwhint{top:44px;bottom:auto;width:94vw}#pwres{top:44px;bottom:auto;width:94vw}}
