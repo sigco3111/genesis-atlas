@@ -26,6 +26,9 @@ def load_geoms(path):
         props = f['properties'] or {}
         name = props.get('NAME')
         if name is not None and not name.strip(): name = None
+        if name is None:  # fix_labels.py와 동일: 출처 메타데이터 폴백
+            name = props.get('SUBJECTO') or props.get('PARTOF') or props.get('ABBREVN')
+            if name == 'Antarctica': name = None
         g = f['geometry']
         polys = g['coordinates'] if g['type']=='MultiPolygon' else [g['coordinates']]
         minx=miny=1e9; maxx=maxy=-1e9
