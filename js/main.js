@@ -171,6 +171,7 @@ let selPower = null;
 const PW_GOOD = new Set(['bless', 'tribe', 'prophet', 'hero', 'peace']);
 const PW_ICON = { bless: '🌧', drought: '🏜', plague: '☠', quake: '💥', volcano: '🌋', meteor: '☄', tribe: '🛖', prophet: '📿', hero: '⭐', revolt: '🔥', peace: '🕊', war: '⚔' };
 let pwPending = null, lastPtr = 'mouse';
+function touchUI() { return (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || lastPtr === 'touch'; }
 function powerColor(type, ok) { return !ok ? '#9aa7b5' : PW_GOOD.has(type) ? '#7fe08a' : '#ff6a55'; }
 function updatePowerPreview(p) {
   const hint = $('pwhint');
@@ -222,7 +223,7 @@ function showPowerResult(type, p, d) {
 function select(p) {
   if (p < 0) { R.sel = -1; R.paintHL(); return; }
   if (selPower) {
-    if (lastPtr === 'touch' && (!pwPending || pwPending.p !== p || pwPending.type !== selPower)) { pwPending = { type: selPower, p }; updatePowerPreview(p); return; }
+    if (touchUI() && (!pwPending || pwPending.p !== p || pwPending.type !== selPower)) { pwPending = { type: selPower, p }; updatePowerPreview(p); return; }
     firePower(selPower, p); return;
   }
   R.sel = p; R.paintHL(); tab = 'sel'; setPanelOpen(true); renderPanel();
