@@ -23,17 +23,36 @@ async function getPlaces() { try { return await (await fetch('data/places.json')
 async function getMap(kind, seed) { return kind === 'earth' ? await getEarth() : generateMap(kind, seed); }
 
 // ---------- 시작 화면 ----------
+const ERA_LIST = [
+  [-10000, '기원전 10000년 — 신석기의 새벽'], [-3000, '기원전 3000년 — 최초의 문명'],
+  [-500, '기원전 500년 — 고전 문명의 시대'], [-323, '기원전 323년 — 알렉산드로스의 시대'],
+  [100, '서기 100년 — 로마와 한의 전성기'], [600, '서기 600년 — 고대 제국들의 세계'],
+  [1000, '서기 1000년 — 송과 바이킹의 시대'], [1279, '서기 1279년 — 몽골 제국의 전성기'],
+  [1492, '서기 1492년 — 콜럼버스의 항해'], [1650, '서기 1650년 — 화약 제국의 시대'],
+  [1815, '서기 1815년 — 나폴레옹 이후의 세계'], [1914, '서기 1914년 — 제1차 세계대전 전야'],
+  [1945, '서기 1945년 — 제2차 세계대전 종전'], [2026, '서기 2026년 — 현재의 세계'],
+];
 for (const k of MAP_KINDS) { const o = document.createElement('option'); o.value = k.id; o.textContent = k.name + (k.desc ? ' - ' + k.desc : ''); $('selMap').appendChild(o); }
-function syncMode() { const earth = $('selMap').value === 'earth'; $('selMode').querySelector('[value=real]').disabled = !earth; if (!earth) $('selMode').value = 'emergent'; }
-$('selMap').onchange = syncMode; syncMode();
+for (const [y, label] of ERA_LIST) { const o = document.createElement('option'); o.value = y; o.textContent = label; if (y === 2026) o.selected = true; $('selEra').appendChild(o); }
+function syncMode() { const earth = $('selMap').value === 'earth'; $('selMode').querySelector('[value=real]').disabled = !earth; if (!earth) $('selMode').value = 'emergent'; $('eraRow').style.display = $('selMode').value === 'real' && earth ? '' : 'none'; }
+$('selMap').onchange = syncMode; $('selMode').onchange = syncMode; syncMode();
+async function getEra(year) { return await (await fetch(`data/era/${year}.json`)).json(); }
 if (localStorage.getItem(SAVE)) $('cont').classList.remove('hide');
 $('go').onclick = async () => {
   $('loadmsg').textContent = '세계를 만드는 중...'; await new Promise((r) => setTimeout(r, 30));
   try {
     const kind = $('selMap').value, seed = +$('seed').value || 1, mode = $('selMode').value;
+    const eraYear = mode === 'real' ? +$('selEra').value : 2026;
     map = await getMap(kind, seed);
-    const places = mode === 'real' ? await getPlaces() : [];
-    S = sim.createState(map, { mode, seed, hearths: +$('hearths').value || 6, aggr: +$('aggr').value, places });
+    let places = [], startYear, eraLabel;
+    if (mode === 'real' && eraYear !== 2026) {
+      const era = await getEra(eraYear);
+      map = structuredClone(map);
+      map.countries = era.countries;
+      era.owner.forEach((c, i) => { map.provinces[i].c = c; });
+      startYear = era.year; eraLabel = era.label;
+    } else if (mode === 'real') places = await getPlaces();
+    S = sim.createState(map, { mode, seed, hearths: +$('hearths').value || 6, aggr: +$('aggr').value, places, startYear, eraLabel });
     boot();
   } catch (e) { $('loadmsg').textContent = '시작 실패: ' + e.message; console.error(e); }
 };

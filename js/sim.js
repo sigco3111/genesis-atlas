@@ -108,7 +108,7 @@ function initReal(S, map, opts) {
   const rng = S.rng, N = map.provinces.length, P = S.P; const C = map.countries;
   S.year = opts.startYear ?? 2026;
   const sovIdx = C.map((c, i) => { if (c.type !== 'Dep') return i; const j = C.findIndex((d) => d.type !== 'Dep' && d.en === c.sov); return j >= 0 ? j : i; });
-  const byProv = {}; for (let p = 0; p < N; p++) { const c = map.provinces[p].c; (byProv[c] ||= []).push(p); }
+  const byProv = {}; for (let p = 0; p < N; p++) { const c = map.provinces[p].c; if (c < 0) continue; (byProv[c] ||= []).push(p); }
   const natOf = {}, cultOf = {}, capOf = {};
   const techOf = { '1': 8.5, '2': 8.0, '3': 7.5, '4': 6.7, '5': 5.9, '7': 6.5 };
   const mkCult = (ci) => { const cu = S.cultures.length; const lang = makeLang(rng); const hue = rng.range(0, 360); S.cultures.push({ id: cu, name: C[ci].ko + '인', lang, hue, rgb: hslToRgb(hue, 55, 58), parent: -1 }); return cu; };
@@ -117,8 +117,8 @@ function initReal(S, map, opts) {
     if (natOf[s] === undefined) {
       cultOf[s] = mkCult(s); const rl = newReligion(S, rng, cultOf[s], byProv[s][0], S.year);
       const cap = byProv[s].reduce((a, b) => (map.provinces[b].a > map.provinces[a].a ? b : a));
-      const tt = techOf[C[s].inc] ?? 6.5; S.P.rel[cap] = rl;
-      const n = newNation(S, map, cap, C[s].ko, cultOf[s], tt); n.gov = '현대 국가'; n.real = C[s].iso; n.en = C[s].en; n.rel = rl;
+      const tt = C[s].tech ?? techOf[C[s].inc] ?? 6.5; S.P.rel[cap] = rl;
+      const n = newNation(S, map, cap, C[s].ko, cultOf[s], tt); n.gov = tt < 7 ? '왕조 국가' : '현대 국가'; n.real = C[s].iso; n.en = C[s].en; n.rel = rl;
       natOf[s] = n.id;
     }
     if (cultOf[ci] === undefined) cultOf[ci] = mkCult(ci);
@@ -129,7 +129,7 @@ function initReal(S, map, opts) {
     let cx = 0, cy = 0, ca = 0; for (const p of provs) { const o = map.provinces[p]; cx += o.x * o.a; cy += o.y * o.a; ca += o.a; } cx /= ca; cy /= ca;
     provs.forEach((p, k) => {
       const o = map.provinces[p]; P.owner[p] = nid; P.cult[p] = cultOf[ci]; P.rel[p] = S.nations[nid].rel; P.pop[p] = popTot * w[k] / wsum;
-      P.tech[p] = techOf[C[ci].inc] ?? 6.5; P.unrest[p] = 0.05; { const K0 = capacity(S, map, p); P.km[p] = Math.max(1, P.pop[p] * 1.2 / Math.max(1, K0)); }
+      P.tech[p] = C[ci].tech ?? techOf[C[ci].inc] ?? 6.5; P.unrest[p] = 0.05; { const K0 = capacity(S, map, p); P.km[p] = Math.max(1, P.pop[p] * 1.2 / Math.max(1, K0)); }
       if (provs.length === 1) S.provName[p] = C[ci].ko; else { const dx = o.x - cx, dy = o.y - cy; const d = Math.hypot(dx, dy); let dir = '중부'; if (d > 18) { const q = Math.round((Math.atan2(dy, dx) + Math.PI) / (Math.PI / 4)) % 8; dir = ['서부', '남서부', '남부', '남동부', '동부', '북동부', '북부', '북서부'][q]; } S.provName[p] = `${C[ci].ko} ${dir}`; }
     });
   }
@@ -144,7 +144,7 @@ function initReal(S, map, opts) {
     }
   }
   for (let p = 0; p < N; p++) if (P.city[p] === 0 && P.pop[p] > 800000) { P.city[p] = 1; S.cityName[p] = S.provName[p] + ' 중심'; }
-  addLog(S, '현재 세계의 국가 배치에서 시뮬레이션이 시작됩니다. 국경은 Natural Earth 데이터 기준의 근사이며, 이후 전개는 가상의 대체역사입니다.', 3);
+  addLog(S, opts.eraLabel ? `${opts.eraLabel}의 배치에서 시뮬레이션이 시작됩니다. 당시 세계를 근사한 시작 시나리오이며, 이후 전개는 가상의 대체역사입니다.` : '현재 세계의 국가 배치에서 시뮬레이션이 시작됩니다. 국경은 Natural Earth 데이터 기준의 근사이며, 이후 전개는 가상의 대체역사입니다.', 3);
 }
 
 // ---------- 집계 ----------
