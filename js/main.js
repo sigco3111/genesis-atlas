@@ -69,6 +69,8 @@ function boot() { console.log('boot', S.mode, S.year);
   $('start').classList.add('hide');
   R = new Renderer($('map'), map); if (!boot.done) { boot.done = true; bindInput(); window.addEventListener('resize', () => { R.resize(); needRefresh = true; }); requestAnimationFrame(loop); }
   R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = 'political'; R.sel = -1; speed = window.__speed ?? 5; running = true; needRefresh = true; buildBars(); renderPanel();
+  let pref = null; try { pref = localStorage.getItem(PANEL_PREF); } catch (e) {}
+  setPanelOpen(pref === null ? !isMobileLayout() : pref === '1', false);
   toast('휠·드래그로 이동, 지역을 눌러 살펴보세요');
 }
 function buildBars() {
@@ -77,7 +79,23 @@ function buildBars() {
   markBars();
 }
 function markBars() { for (const b of $('speed').children) b.classList.toggle('on', +b.dataset.v === speed); for (const b of $('modes').children) b.classList.toggle('on', b.dataset.m === R.mode); }
-$('menuBtn').onclick = () => $('panel').classList.toggle('open');
+// ---------- 패널 접기/펼치기 ----------
+const PANEL_PREF = 'genesis-atlas-panel';
+const isMobileLayout = () => window.innerWidth <= 760;
+function setPanelOpen(open, save = true) {
+  $('panel').classList.toggle('open', open);
+  if (save) try { localStorage.setItem(PANEL_PREF, open ? '1' : '0'); } catch (e) {}
+  updateHandle();
+}
+function updateHandle() {
+  const h = $('panelHandle'); if (!h) return;
+  const open = $('panel').classList.contains('open');
+  h.textContent = isMobileLayout() ? (open ? '\u25be' : '\u25b4') : (open ? '\u25b6' : '\u25c0');
+  h.title = open ? '패널 접기' : '패널 펼치기';
+}
+$('menuBtn').onclick = () => setPanelOpen(!$('panel').classList.contains('open'));
+$('panelHandle').onclick = () => setPanelOpen(!$('panel').classList.contains('open'));
+window.addEventListener('resize', updateHandle);
 
 // ---------- 루프 ----------
 function loop(t) { if (!loop.n) console.log('loop1'); loop.n = (loop.n || 0) + 1; if (loop.n === 3) console.log('loop3');
@@ -135,7 +153,7 @@ let selPower = null;
 function select(p) {
   if (p < 0) { R.sel = -1; R.paintHL(); return; }
   if (selPower) { const r = sim.applyPower(S, map, selPower, p); toast(r.ok ? sim.POWERS[selPower].name + ' 발동' : r.msg); needRefresh = true; if (r.ok) { R.sel = p; R.paintHL(); } return; }
-  R.sel = p; R.paintHL(); tab = 'sel'; $('panel').classList.add('open'); renderPanel();
+  R.sel = p; R.paintHL(); tab = 'sel'; setPanelOpen(true); renderPanel();
 }
 
 // ---------- 패널 ----------
