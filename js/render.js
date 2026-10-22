@@ -108,14 +108,20 @@ export class Renderer {
     const rgba = (r, g, b, a) => ((a << 24) | (b << 16) | (g << 8) | r) >>> 0;
     this.warPairs.clear();
     for (const w of S.wars) { for (const a of w.A) for (const b of w.D) { this.warPairs.add(a * 4096 + b); this.warPairs.add(b * 4096 + a); } }
+    this.sc = { pl: 0, ph: 3, tl: 0, th: 9 };
+    if (mode === 'pop' || mode === 'tech') {
+      const d = [], tt = []; for (let p = 0; p < N; p++) if (S.P.pop[p] > 1) { d.push(Math.log10(1 + S.P.pop[p] / Math.max(1, map.provinces[p].a) * 40)); tt.push(S.P.tech[p]); }
+      d.sort((a, b) => a - b); tt.sort((a, b) => a - b); const q = (a, f) => a.length ? a[Math.min(a.length - 1, Math.floor(a.length * f))] : 0;
+      this.sc = { pl: q(d, 0.05), ph: q(d, 0.97), tl: q(tt, 0.05), th: q(tt, 0.97) };
+    }
     for (let p = 0; p < N; p++) {
       const ow = S.P.owner[p]; key[p] = mode === 'political' || mode === 'terrain' ? ow : (mode === 'culture' ? S.P.cult[p] : mode === 'religion' ? S.P.rel[p] : ow);
       let c = 0;
       if (mode === 'political') { if (ow >= 0) { const n = S.nations[ow]; c = rgba(n.rgb[0], n.rgb[1], n.rgb[2], 168); } else if (S.P.pop[p] > 5) c = rgba(255, 255, 255, 30); }
       else if (mode === 'culture') { const cu = S.P.cult[p]; if (cu >= 0 && S.P.pop[p] > 1) { const k = S.cultures[cu].rgb; c = rgba(k[0], k[1], k[2], 185); } }
       else if (mode === 'religion') { const r = S.P.rel[p]; if (r >= 0 && S.P.pop[p] > 1) { const k = S.religions[r].rgb; c = rgba(k[0], k[1], k[2], 185); } }
-      else if (mode === 'pop') { const o = map.provinces[p]; const dn = S.P.pop[p] / Math.max(1, o.a); const t = Math.min(1, Math.log10(1 + dn * 40) / 3); if (S.P.pop[p] > 1) c = ramp(t, [[40, 40, 80], [200, 80, 60], [255, 230, 120]], 200); }
-      else if (mode === 'tech') { if (S.P.pop[p] > 1) { const t = Math.min(1, S.P.tech[p] / 9); c = ramp(t, [[60, 60, 100], [60, 160, 200], [240, 220, 100], [255, 120, 80]], 200); } }
+      else if (mode === 'pop') { const o = map.provinces[p]; const dn = S.P.pop[p] / Math.max(1, o.a); const t = Math.max(0, Math.min(1, (Math.log10(1 + dn * 40) - this.sc.pl) / Math.max(0.3, this.sc.ph - this.sc.pl))); if (S.P.pop[p] > 1) c = ramp(t, [[40, 40, 80], [200, 80, 60], [255, 230, 120]], 200); }
+      else if (mode === 'tech') { if (S.P.pop[p] > 1) { const t = Math.max(0, Math.min(1, (S.P.tech[p] - this.sc.tl) / Math.max(0.4, this.sc.th - this.sc.tl))); c = ramp(t, [[60, 60, 100], [60, 160, 200], [240, 220, 100], [255, 120, 80]], 200); } }
       else if (mode === 'unrest') { if (ow >= 0) { c = ramp(Math.min(1, S.P.unrest[p]), [[50, 130, 70], [230, 200, 70], [220, 50, 50]], 190); } }
       col[p] = c;
     }

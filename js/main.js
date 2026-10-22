@@ -125,6 +125,7 @@ let panelSig = '';
 function kv(k, v) { return `<div class="kv"><span>${k}</span><b>${v}</b></div>`; }
 function renderPanel(auto) {
   if (!S) return;
+  if (auto && $('panel').matches(':active')) return;
   $('tabs').innerHTML = TABS.map(([k, t]) => `<button data-t="${k}" class="${tab === k ? 'on' : ''}">${t}</button>`).join('');
   for (const b of $('tabs').children) b.onclick = () => { tab = b.dataset.t; panelSig = ''; renderPanel(); };
   const body = $('tabBody'); const st = S.stats; let h = '';
