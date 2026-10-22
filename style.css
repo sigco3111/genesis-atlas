@@ -41,7 +41,7 @@ select,input{background:#12304d;border:1px solid #35597f;border-radius:8px;paddi
 @media(min-width:761px){#panelHandle{left:-40px;top:50%;transform:translateY(-50%);width:40px;height:120px;border-radius:10px 0 0 10px;border-right:0;box-shadow:-4px 0 12px #000a;writing-mode:vertical-rl}}
 @media(max-width:760px){#panelHandle{top:-32px;left:50%;transform:translateX(-50%);min-width:150px;height:32px;border-radius:10px 10px 0 0;border-bottom:0;box-shadow:0 -4px 12px #000a}}
 #tabBody a{color:#9fd0ff}#tabBody a:visited{color:#c6b3ff}
-@media(max-width:760px){#toast{bottom:auto;top:128px;z-index:6;background:#000e;width:88%;text-align:center;border-radius:14px}}
+@media(max-width:760px){#toast{bottom:64px;top:auto;z-index:7;background:#000e;width:88%;text-align:center;border-radius:14px}
 #track{position:fixed;left:10px;top:50px;width:240px;background:#0a1a2bee;border:1px solid #3a5f86;border-radius:12px;padding:10px 12px;z-index:5;box-shadow:0 4px 16px #0008;font-size:13px}
 #track .thead{display:flex;gap:6px;align-items:baseline;font-size:14px;margin-bottom:4px}
 #track .thead b{color:#fff}
