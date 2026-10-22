@@ -42,3 +42,20 @@ select,input{background:#12304d;border:1px solid #35597f;border-radius:8px;paddi
 @media(max-width:760px){#panelHandle{top:-32px;left:50%;transform:translateX(-50%);min-width:150px;height:32px;border-radius:10px 10px 0 0;border-bottom:0;box-shadow:0 -4px 12px #000a}}
 #tabBody a{color:#9fd0ff}#tabBody a:visited{color:#c6b3ff}
 @media(max-width:760px){#toast{bottom:auto;top:128px;z-index:6;background:#000e;width:88%;text-align:center;border-radius:14px}}
+#track{position:fixed;left:10px;top:50px;width:240px;background:#0a1a2bee;border:1px solid #3a5f86;border-radius:12px;padding:10px 12px;z-index:5;box-shadow:0 4px 16px #0008;font-size:13px}
+#track .thead{display:flex;gap:6px;align-items:baseline;font-size:14px;margin-bottom:4px}
+#track .thead b{color:#fff}
+#track .thead span{color:#9bb3cc;font-size:12px;margin-left:auto}
+#track .trow{padding:2px 0;color:#cfe3ff}
+#track .trow em{font-style:normal;font-size:12px;color:#9bb3cc}
+#track .up{color:#8fe08f}#track .down{color:#ff9a8a}
+#track .twar{color:#ff9a8a;font-weight:600}
+#track .tpeace{color:#9bb3cc}
+#track .tdead{color:#ff9a8a;font-weight:600;padding:2px 0}
+#track .tfine{font-size:11px;color:#7f97b0;margin-top:2px}
+#track .tnews{margin-top:6px;border-top:1px solid #1d3652;padding-top:4px;font-size:12px;color:#8aa3bd;max-height:84px;overflow:auto}
+#track .tnews div{padding:1px 0}
+#track .tbtns{display:flex;gap:6px;margin-top:8px}
+#track .tbtns button{flex:1;padding:5px 4px;font-size:12px}
+#track canvas{width:100%;height:40px;background:#0b2036;border-radius:6px;margin-top:6px}
+@media(max-width:760px){#track{top:58px;left:8px;width:212px;font-size:12px}}

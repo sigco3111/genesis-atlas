@@ -75,7 +75,7 @@ export class Renderer {
     this.cells = buildCellIndex(map);
     // 지방 경계 마스크 (셀 단위로 이웃과 다른 지방)
     this.cam = { x: W / 2, y: H / 2, z: 1 }; this.minZ = 0.5;
-    this.mode = 'political'; this.dirty = true; this.sel = -1; this.hover = -1; this.effects = []; this.time = 0;
+    this.mode = 'political'; this.dirty = true; this.sel = -1; this.hover = -1; this.trackId = -1; this.effects = []; this.time = 0;
     this.provColor = new Uint32Array(map.provinces.length); this.ownerKey = new Int32Array(map.provinces.length).fill(-1);
     this.labels = []; this.showTrade = true; this.warPairs = new Set();
     this.resize();
@@ -133,7 +133,7 @@ export class Renderer {
     if (mode === 'political' || mode === 'terrain' || mode === 'pop' || mode === 'tech' || mode === 'unrest') {
       for (const n of S.nations) {
         if (!n.alive || !n.pc) continue;
-        out.push({ t: n.name, x: n.lx, y: n.ly, s: Math.sqrt(n.pc), n: n.id, big: n.pc });
+        out.push({ t: (S.track && S.track.id === n.id ? '\u2605 ' : '') + n.name, x: n.lx, y: n.ly, s: Math.sqrt(n.pc), n: n.id, big: n.pc });
       }
     }
     out.sort((a, b) => b.big - a.big); return out;
@@ -142,6 +142,7 @@ export class Renderer {
     const map = this.map; const d = this.ovImg.data; const u32 = new Uint32Array(d.buffer);
     const { prov, land } = map; const col = this.provColor, key = this.ownerKey; const mode = this.mode;
     const bord = this.bordersOn !== false;
+    const trk = (mode === 'political' || mode === 'terrain') ? this.trackId : -1;
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const i = y * W + x, p = prov[i];
@@ -154,6 +155,11 @@ export class Renderer {
           if (y < H - 1) { const q = prov[i + W]; if (q >= 0 && q !== p && key[q] !== k) bD = 1; else if (q >= 0 && q !== p && mode !== 'political') bD = 2; }
           if (x < W - 1 && prov[i + 1] >= 0 && key[prov[i + 1]] !== k && this._war(this.S, p, prov[i + 1])) bR = 3;
           if (y < H - 1 && prov[i + W] >= 0 && key[prov[i + W]] !== k && this._war(this.S, p, prov[i + W])) bD = 3;
+          if (trk >= 0) {
+            const ownP = this.S.P.owner[p] === trk;
+            if (x < W - 1 && prov[i + 1] >= 0 && (this.S.P.owner[prov[i + 1]] === trk) !== ownP) bR = 4;
+            if (y < H - 1 && prov[i + W] >= 0 && (this.S.P.owner[prov[i + W]] === trk) !== ownP) bD = 4;
+          }
         }
         const o0 = (y * 2) * TW + x * 2, o1 = o0 + TW;
         u32[o0] = c; u32[o0 + 1] = bR ? this._bc(bR, c) : c; u32[o1] = bD ? this._bc(bD, c) : c; u32[o1 + 1] = (bR || bD) ? this._bc(bR || bD, c) : c;
@@ -161,7 +167,7 @@ export class Renderer {
     }
     this.ovCtx.putImageData(this.ovImg, 0, 0);
   }
-  _bc(t, c) { if (t === 3) return 0xff2828d8; if (t === 2) return 0x40000000 | (c & 0xffffff) >>> 1 & 0x7f7f7f | 0x40000000; return 0xe0201a18; }
+  _bc(t, c) { if (t === 4) return 0xff4ad2ff; if (t === 3) return 0xff2828d8; if (t === 2) return 0x40000000 | (c & 0xffffff) >>> 1 & 0x7f7f7f | 0x40000000; return 0xe0201a18; }
   _war(S, p, q) { const a = S.P.owner[p], b = S.P.owner[q]; if (a < 0 || b < 0) return false; return this.warPairs.has(a * 4096 + b); }
   refresh(S) { this.S = S; this.computeColors(S); this.paintOverlay(); this.dirty = false; this.paintHL(); }
   paintHL() {

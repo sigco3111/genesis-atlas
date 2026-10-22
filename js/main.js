@@ -68,7 +68,7 @@ $('cont').onclick = async () => {
 function boot() { console.log('boot', S.mode, S.year);
   $('start').classList.add('hide');
   R = new Renderer($('map'), map); if (!boot.done) { boot.done = true; bindInput(); window.addEventListener('resize', () => { R.resize(); needRefresh = true; }); requestAnimationFrame(loop); }
-  R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = 'political'; R.sel = -1; speed = window.__speed ?? 1; running = true; needRefresh = true; buildBars(); renderPanel();
+  R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = 'political'; R.sel = -1; R.trackId = S.track ? S.track.id : -1; speed = window.__speed ?? 1; running = true; needRefresh = true; buildBars(); renderPanel(); renderTrack();
   let pref = null; try { pref = localStorage.getItem(PANEL_PREF); } catch (e) {}
   setPanelOpen(pref === null ? !isMobileLayout() : pref === '1', false);
   toast('휠·드래그로 이동, 지역을 눌러 살펴보세요');
@@ -117,7 +117,7 @@ function loop(t) { if (!loop.n) console.log('loop1'); loop.n = (loop.n || 0) + 1
   { const c = R.cam; const key = c.x + '|' + c.y + '|' + c.z + '|' + R.sel + '|' + R.mode + '|' + R.cssW + R.cssH + '|' + lastRefresh; if (speed > 0 || R.effects.length || key !== loop.dk || R.fresh) { R.draw(dt, S); loop.dk = key; R.fresh = false; } }
   $('year').textContent = yearStr(S.year); $('era').textContent = ERA_NAMES[Math.min(9, Math.floor(S.stats.maxT))];
   $('spop').textContent = '인구 ' + numStr(S.stats.world); $('snat').textContent = '국가 ' + S.stats.alive; $('swar').textContent = '전쟁 ' + S.wars.length;
-  if (t - (loop.pt || 0) > 800) { loop.pt = t; renderPanel(true); }
+  if (t - (loop.pt || 0) > 800) { loop.pt = t; renderPanel(true); renderTrack(); }
   if (t - (loop.st || 0) > 20000 && running) { loop.st = t; save(); }
 }
 async function pack(txt) {
@@ -169,13 +169,14 @@ function renderPanel(auto) {
   const body = $('tabBody'); const st = S.stats; let h = '';
   if (tab === 'world') {
     h += '<h3>세계 현황</h3>' + kv('시대', ERA_NAMES[Math.min(9, Math.floor(st.maxT))]) + kv('총 인구', numStr(st.world)) + kv('살아있는 국가', st.alive) + kv('진행 중인 전쟁', S.wars.length) + kv('문화 / 종교', S.cultures.length + ' / ' + S.religions.length);
-    h += '<h3>강대국</h3>' + S.nations.filter((n) => n.alive).sort((a, b) => b.pop - a.pop).slice(0, 10).map((n) => `<div class="kv"><span><i style="color:rgb(${n.rgb})">■</i> <a href="#" data-n="${n.id}">${n.name}</a></span><b>${numStr(n.pop)}</b></div>`).join('');
+    h += '<h3>강대국</h3>' + S.nations.filter((n) => n.alive).sort((a, b) => b.pop - a.pop).slice(0, 10).map((n) => `<div class="kv"><span><i style="color:rgb(${n.rgb})">■</i> <a href="#" data-n="${n.id}">${n.name}</a> <a href="#" data-w="${n.id}" title="이 국가 추적">${S.track && S.track.id === n.id ? '★' : '☆'}</a></span><b>${numStr(n.pop)}</b></div>`).join('');
     h += '<h3>인구 추이</h3><canvas class="spark" id="spark" width="300" height="60"></canvas>';
   } else if (tab === 'sel') {
     const p = R.sel; if (p < 0) h = '<p>지도에서 지역을 눌러 보세요.</p>'; else {
       const o = map.provinces[p], ow = S.P.owner[p]; const n = ow >= 0 ? S.nations[ow] : null;
       h += `<h3>${S.provName[p] || '무인 지대'}</h3>` + kv('인구', numStr(S.P.pop[p])) + kv('기술', S.P.tech[p].toFixed(2)) + kv('불안', Math.round(S.P.unrest[p] * 100) + '%') + kv('도시', S.cityName[p] || '-') + kv('문화', S.P.cult[p] >= 0 ? S.cultures[S.P.cult[p]].name : '-') + kv('신앙', S.P.rel[p] >= 0 ? S.religions[S.P.rel[p]].name : '-');
       if (n) h += `<h3>${n.name}</h3>` + kv('정체', n.gov) + kv('지도자', n.lead.name + ' (' + sim.traitText(n.lead) + ')') + kv('인구', numStr(n.pop)) + kv('지방', n.pc) + kv('안정도', Math.round(n.stab * 100) + '%') + kv('건국', yearStr(n.born)) + kv('전적', n.wins + '승 ' + n.losses + '패');
+      if (n && n.alive) h += `<button class="pw" data-trk="${n.id}">${S.track && S.track.id === n.id ? '★ 추적 해제' : '☆ 이 국가 추적'}<small>인구·영토·전쟁 변화를 화면 왼쪽 위 카드로 계속 보여 줍니다.</small></button>`;
     }
   } else if (tab === 'log') {
     h = '<div class="log">' + S.log.slice(-80).reverse().map((l) => `<div class="i${l.i}">${yearStr(l.y)} · ${l.t}</div>`).join('') + '</div>';
@@ -190,6 +191,8 @@ function renderPanel(auto) {
   if (auto && sig === panelSig) return;
   panelSig = sig; body.innerHTML = h;
   for (const a of body.querySelectorAll('[data-n]')) a.onclick = (e) => { e.preventDefault(); const n = S.nations[+a.dataset.n]; R.sel = n.cap; R.paintHL(); R.focus(n.cap, 3); tab = 'sel'; renderPanel(); };
+  for (const a of body.querySelectorAll('[data-w]')) a.onclick = (e) => { e.preventDefault(); setTracking(+a.dataset.w); };
+  for (const b of body.querySelectorAll('[data-trk]')) b.onclick = () => setTracking(+b.dataset.trk);
   for (const b of body.querySelectorAll('[data-p]')) b.onclick = () => { selPower = selPower === b.dataset.p ? null : b.dataset.p; toast(selPower ? '지도에서 대상 지역을 누르세요' : '취소'); panelSig = ''; renderPanel(); };
   const q = (id) => body.querySelector('#' + id);
   if (q('autoBtn')) q('autoBtn').onclick = () => { S.auto = !S.auto; panelSig = ''; renderPanel(); };
@@ -199,5 +202,50 @@ function renderPanel(auto) {
   if (q('bImp')) q('bImp').onclick = () => q('fImp').click();
   if (q('fImp')) q('fImp').onchange = async (e) => { try { localStorage.setItem(SAVE, await pack(await e.target.files[0].text())); $('cont').click(); } catch (x) { toast('불러오기 실패'); } };
   const sp = q('spark'); if (sp) { const c = sp.getContext('2d'), hs = S.hist; c.strokeStyle = '#6db3ff'; c.beginPath(); const mx = Math.max(1, ...hs.map((x) => x.pop)); hs.forEach((x, i) => { const v = x.pop; const X = i / Math.max(1, hs.length - 1) * 300, Y = 58 - v / mx * 54; i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.stroke(); }
+}
+// ---------- 국가 추적 카드 ----------
+let trackSig = '';
+function setTracking(id) {
+  if (id == null || (S.track && S.track.id === id)) S.track = null; else sim.setTrack(S, id);
+  R.trackId = S.track ? S.track.id : -1;
+  needRefresh = true; trackSig = ''; panelSig = ''; renderTrack(); renderPanel();
+  toast(S.track ? S.nations[S.track.id].name + ' 추적 시작' : '추적 해제');
+}
+function renderTrack() {
+  const el = $('track'); if (!S) return;
+  const T = S.track;
+  if (!T) { el.classList.add('hide'); trackSig = ''; return; }
+  const n = S.nations[T.id];
+  if (!n) { el.classList.add('hide'); return; }
+  el.classList.remove('hide');
+  if (T.dead && !T.mourned) { T.mourned = true; toast('추적 중이던 ' + n.name + '이(가) 역사에서 사라졌습니다'); }
+  const wars = n.alive ? S.wars.filter((w) => w.A.includes(n.id) || w.D.includes(n.id)) : [];
+  const news = []; for (let i = S.log.length - 1; i >= 0 && news.length < 3; i--) if (S.log[i].n === n.id) news.push(S.log[i]);
+  const sig = [n.alive, Math.round(n.pop), n.pc, Math.round(n.stab * 100), wars.length, news.length ? news[0].y + news[0].t : '', T.gained, T.lost, T.dead].join('|');
+  if (sig === trackSig) return; trackSig = sig;
+  let h = `<div class="thead"><i style="color:rgb(${n.rgb})">■</i><b>${n.name}</b><span>${n.gov}</span></div>`;
+  if (!n.alive) {
+    h += `<div class="tdead">${yearStr(n.died)} 멸망 · 존속 ${Math.max(1, n.died - n.born)}년</div>`;
+    h += `<div class="trow">최대 인구 ${numStr(n.peakPop)} · 최대 지방 ${n.peakPc}</div>`;
+  } else {
+    const dp = T.pop0 > 0 ? Math.round((n.pop / T.pop0 - 1) * 100) : 0;
+    h += `<div class="trow">인구 <b>${numStr(n.pop)}</b> <em class="${dp >= 0 ? 'up' : 'down'}">${dp >= 0 ? '+' : ''}${dp}%</em> · 지방 <b>${n.pc}</b> <em>${T.gained || T.lost ? '+' + T.gained + '/-' + T.lost : '±0'}</em></div>`;
+    h += `<div class="trow">안정도 ${Math.round(n.stab * 100)}% · ${n.lead.name} · ${n.wins}승 ${n.losses}패</div>`;
+    if (wars.length) h += wars.map((w) => { const foe = (w.A.includes(n.id) ? w.D : w.A).map((x) => S.nations[x] && S.nations[x].name).filter(Boolean).join('·'); return `<div class="trow twar">⚔ ${foe}와 전쟁 중 (${S.year - w.start}년째)</div>`; }).join('');
+    else h += '<div class="trow tpeace">전쟁 없이 평화 유지 중</div>';
+  }
+  h += '<canvas id="tspark" width="222" height="40"></canvas>';
+  h += `<div class="tfine">${yearStr(T.since)}부터 추적 중</div>`;
+  if (news.length) h += '<div class="tnews">' + news.map((l) => `<div>${yearStr(l.y)} · ${l.t}</div>`).join('') + '</div>';
+  h += '<div class="tbtns"><button id="tFocus">지도에서 보기</button><button id="tOff">추적 해제</button></div>';
+  el.innerHTML = h;
+  $('tFocus').onclick = () => { if (n.cap >= 0 && map.provinces[n.cap]) { R.focus(n.cap, 4); R.sel = n.cap; R.paintHL(); needRefresh = true; } };
+  $('tOff').onclick = () => setTracking(null);
+  const c = $('tspark').getContext('2d'); const hs = T.hist;
+  if (hs.length) {
+    c.strokeStyle = '#7fd0ff'; c.lineWidth = 1.5; c.beginPath();
+    const mx = Math.max(1, ...hs.map((x) => x[1]));
+    hs.forEach((x, i) => { const X = i / Math.max(1, hs.length - 1) * 220, Y = 38 - x[1] / mx * 34; i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.stroke();
+  }
 }
 { const q = new URLSearchParams(location.search); if (q.has('map')) $('selMap').value = q.get('map'); if (q.has('mode')) $('selMode').value = q.get('mode'); if (q.has('auto')) { $('go').click(); window.__skip = +q.get('auto') || 0; if (q.has('speed')) window.__speed = +q.get('speed'); } }

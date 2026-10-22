@@ -28,7 +28,7 @@ export function createState(map, opts = {}) {
     v: VERSION, seed, mapKind: map.kind, mode: opts.mode || 'emergent', year: 0, rng, techRate: opts.techRate ?? 1,
     P: { pop: new Float32Array(N), tech: new Float32Array(N), owner: new Int16Array(N).fill(-1), cult: new Int16Array(N).fill(-1), rel: new Int16Array(N).fill(-1), unrest: new Float32Array(N), city: new Uint8Array(N), fx: new Float32Array(N).fill(1), km: new Float32Array(N).fill(1), plague: new Uint8Array(N) },
     nations: [], cultures: [], religions: [], wars: [], truce: {}, log: [], hist: [], routes: [], cityName: new Array(N).fill(''), provName: new Array(N).fill(''),
-    auto: !!opts.auto, aggr: opts.aggr ?? 1, worldFirst: {}, stats: {}, fr: null, nextWar: 1,
+    auto: !!opts.auto, aggr: opts.aggr ?? 1, worldFirst: {}, stats: {}, fr: null, nextWar: 1, track: null,
     eventsOn: opts.events !== false, deaths: { war: 0, plague: 0, famine: 0 }, fxQueue: [],
   };
   if (S.mode === 'real') initReal(S, map, opts); else initEmergent(S, map, opts);
@@ -200,12 +200,30 @@ function sampleHistory(S) {
   if (S.hist.length > 900) S.hist.splice(0, 1);
 }
 
+// ---------- 국가 추적 ----------
+export function setTrack(S, id) {
+  const n = S.nations[id];
+  if (!n) { S.track = null; return; }
+  S.track = { id, since: S.year, pop0: Math.round(n.pop), pc0: n.pc, hist: [[S.year, Math.round(n.pop), n.pc]], gained: 0, lost: 0, dead: false, mourned: false };
+}
+export function sampleTrack(S) {
+  const T = S.track; if (!T) return;
+  const n = S.nations[T.id]; if (!n) { S.track = null; return; }
+  if (!n.alive) { if (!T.dead) { T.dead = true; T.hist.push([S.year, 0, 0]); } return; }
+  const last = T.hist[T.hist.length - 1];
+  if (last && last[0] === S.year) return;
+  if (last) { const d = n.pc - last[2]; if (d > 0) T.gained += d; else T.lost -= d; }
+  T.hist.push([S.year, Math.round(n.pop), n.pc]);
+  if (T.hist.length > 600) T.hist = T.hist.filter((_, i) => i % 2 === 0);
+}
+
 // ---------- 한 해 진행 ----------
 export function step(S, map) {
   S.year++; if (S.mode === 'emergent' && S.year === 0) S.year = 1;
   stepProvinces(S, map);
   if (S.year % 2 === 0 || !S.fr) computeFronts(S, map);
   aggregate(S, map);
+  sampleTrack(S);
   stepNations(S, map);
   stepWars(S, map);
   if (S.eventsOn) stepEvents(S, map);
