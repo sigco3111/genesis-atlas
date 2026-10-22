@@ -78,6 +78,21 @@ function buildBars() {
   $('modes').innerHTML = ''; for (const [v, t] of MODES) { const b = document.createElement('button'); b.textContent = t; b.dataset.m = v; b.onclick = () => { R.mode = v; needRefresh = true; markBars(); }; $('modes').appendChild(b); }
   markBars();
 }
+let warFocusIdx = 0;
+function focusWar(w) {
+  if (!w) return false;
+  const wf = (R.warPts || []).find((x) => x.id === w.id);
+  let x, y;
+  if (wf && wf.pts.length) { x = wf.pts.reduce((t, p) => t + p[0], 0) / wf.pts.length; y = wf.pts.reduce((t, p) => t + p[1], 0) / wf.pts.length; }
+  else { const A = S.nations[w.A[0]], D = S.nations[w.D[0]]; if (!A || !D) return false; x = (A.lx + D.lx) / 2; y = (A.ly + D.ly) / 2; }
+  R.focusWorld(x, y, 3.5); needRefresh = true; return true;
+}
+$('swar').style.cursor = 'pointer'; $('swar').title = '눌러서 전선으로 이동';
+$('swar').onclick = () => {
+  if (!S || !S.wars.length) { toast('진행 중인 전쟁이 없습니다'); return; }
+  const w = S.wars[warFocusIdx++ % S.wars.length];
+  if (focusWar(w)) toast('⚔ ' + (S.nations[w.A[0]] || {}).name + ' 대 ' + (S.nations[w.D[0]] || {}).name + ' 전선');
+};
 function markBars() { $('rate').textContent = speed ? (speed >= 1 ? '· 1초에 ' + speed + '년' : '· ' + 1 / speed + '초에 1년') : '· 일시정지'; for (const b of $('speed').children) b.classList.toggle('on', +b.dataset.v === speed); for (const b of $('modes').children) b.classList.toggle('on', b.dataset.m === R.mode); }
 // ---------- 패널 접기/펼치기 ----------
 const PANEL_PREF = 'genesis-atlas-panel';
@@ -241,7 +256,7 @@ function renderTrack() {
     const dp = T.pop0 > 0 ? Math.round((n.pop / T.pop0 - 1) * 100) : 0;
     h += `<div class="trow">인구 <b>${numStr(n.pop)}</b> <em class="${dp >= 0 ? 'up' : 'down'}">${dp >= 0 ? '+' : ''}${dp}%</em> · 지방 <b>${n.pc}</b> <em>${T.gained || T.lost ? '+' + T.gained + '/-' + T.lost : '±0'}</em></div>`;
     h += `<div class="trow">안정도 ${Math.round(n.stab * 100)}% · ${n.lead.name} · ${n.wins}승 ${n.losses}패</div>`;
-    if (wars.length) h += wars.map((w) => { const foe = (w.A.includes(n.id) ? w.D : w.A).map((x) => S.nations[x] && S.nations[x].name).filter(Boolean).join('·'); return `<div class="trow twar">⚔ ${foe}와 전쟁 중 (${S.year - w.start}년째)</div>`; }).join('');
+    if (wars.length) h += wars.map((w) => { const foe = (w.A.includes(n.id) ? w.D : w.A).map((x) => S.nations[x] && S.nations[x].name).filter(Boolean).join('·'); return `<div class="trow twar" data-war="${w.id}" title="눌러서 전선으로 이동">⚔ ${foe}와 전쟁 중 (${S.year - w.start}년째)</div>`; }).join('');
     else h += '<div class="trow tpeace">전쟁 없이 평화 유지 중</div>';
   }
   h += '<canvas id="tspark" width="222" height="40"></canvas>';
@@ -251,6 +266,7 @@ function renderTrack() {
   el.innerHTML = h;
   el.querySelector('.thead').onclick = () => { trackFold = true; try { localStorage.setItem('genesis-atlas-trackfold', '1'); } catch (e) {} trackSig = ''; renderTrack(); };
   el.querySelector('.thead').title = '눌러서 접기';
+  for (const d of el.querySelectorAll('[data-war]')) d.onclick = () => { const w = S.wars.find((x) => x.id === +d.dataset.war); if (w) focusWar(w); };
   $('tFocus').onclick = () => { if (n.cap >= 0 && map.provinces[n.cap]) { R.focus(n.cap, 4); R.sel = n.cap; R.paintHL(); needRefresh = true; } };
   $('tOff').onclick = () => setTracking(null);
   const c = $('tspark').getContext('2d'); const hs = T.hist;

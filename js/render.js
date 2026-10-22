@@ -77,6 +77,7 @@ export class Renderer {
     this.cam = { x: W / 2, y: H / 2, z: 1 }; this.minZ = 0.5;
     this.mode = 'political'; this.dirty = true; this.sel = -1; this.hover = -1; this.trackId = -1; this.effects = []; this.time = 0;
     this.provColor = new Uint32Array(map.provinces.length); this.ownerKey = new Int32Array(map.provinces.length).fill(-1);
+    this.warPts = [];
     this.labels = []; this.showTrade = true; this.warPairs = new Set();
     this.resize();
   }
@@ -100,6 +101,7 @@ export class Renderer {
   }
   pan(dx, dy) { this.cam.x -= dx / this.cam.z; this.cam.y -= dy / this.cam.z; this.clamp(); }
   focus(p, z) { const o = this.map.provinces[p]; this.cam.x = o.ax; this.cam.y = o.ay; if (z) this.cam.z = Math.max(this.cam.z, z); this.clamp(); }
+  focusWorld(x, y, z) { this.cam.x = x; this.cam.y = y; if (z) this.cam.z = Math.max(this.cam.z, z); this.clamp(); }
   provAt(sx, sy) { const [wx, wy] = this.toWorld(sx, sy); const x = Math.floor(wx), y = Math.floor(wy); if (x < 0 || y < 0 || x >= W || y >= H) return -1; return this.map.prov[y * W + x]; }
 
   // 모드별 색 계산
@@ -169,7 +171,28 @@ export class Renderer {
   }
   _bc(t, c) { if (t === 4) return 0xff4ad2ff; if (t === 3) return 0xff2828d8; if (t === 2) return 0x40000000 | (c & 0xffffff) >>> 1 & 0x7f7f7f | 0x40000000; return 0xe0201a18; }
   _war(S, p, q) { const a = S.P.owner[p], b = S.P.owner[q]; if (a < 0 || b < 0) return false; return this.warPairs.has(a * 4096 + b); }
-  refresh(S) { this.S = S; this.computeColors(S); this.paintOverlay(); this.dirty = false; this.paintHL(); }
+  computeWarPts(S) {
+    const out = []; const prv = this.map.provinces;
+    const trk = S.track ? S.track.id : -1;
+    for (const w of S.wars) {
+      const pts = [];
+      for (const a of w.A) {
+        for (const d of w.D) {
+          const l = S.fr && S.fr.get(a * 4096 + d); if (!l || !l.length) continue;
+          const k = Math.min(4, l.length);
+          for (let i = 0; i < k; i++) {
+            const e = l[Math.min(l.length - 1, Math.floor((i + 0.5) * l.length / k))];
+            pts.push([(prv[e[0]].ax + prv[e[1]].ax) / 2, (prv[e[0]].ay + prv[e[1]].ay) / 2]);
+          }
+          if (pts.length >= 8) break;
+        }
+        if (pts.length >= 8) break;
+      }
+      if (pts.length) out.push({ id: w.id, pts: pts.slice(0, 8), trk: trk >= 0 && (w.A.includes(trk) || w.D.includes(trk)) });
+    }
+    this.warPts = out;
+  }
+  refresh(S) { this.S = S; this.computeColors(S); this.paintOverlay(); this.dirty = false; this.paintHL(); this.computeWarPts(S); }
   paintHL() {
     const ctx = this.hlCtx; ctx.clearRect(0, 0, TW, TH);
     const p = this.sel; if (p < 0) return;
@@ -206,6 +229,46 @@ export class Renderer {
       }
       ctx.setLineDash([]);
     }
+    // 전쟁 시각화: 최근 점령(진격 화살표·점령 링) + 교전 지역 마커
+    const caps = S.recentCaps || [];
+    for (const cp of caps) {
+      const age = S.year - cp.y; if (age > 3) continue;
+      const a1 = Math.max(0, 1 - age / 3.5);
+      const nn = S.nations[cp.t]; const col = nn && nn.alive ? `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})` : '#cfd6dd';
+      const o1 = map.provinces[cp.p], o2 = map.provinces[cp.q]; if (!o1 || !o2) continue;
+      const [x1, y1] = this.w2s(o1.ax, o1.ay), [x2, y2] = this.w2s(o2.ax, o2.ay);
+      ctx.globalAlpha = a1 * 0.9; ctx.strokeStyle = col; ctx.fillStyle = col;
+      ctx.lineWidth = Math.max(1.6, Math.min(4, z * 0.7));
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      const ang = Math.atan2(y2 - y1, x2 - x1); const hs = Math.max(5, Math.min(11, z * 1.6));
+      ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x2 - hs * Math.cos(ang - 0.45), y2 - hs * Math.sin(ang - 0.45)); ctx.lineTo(x2 - hs * Math.cos(ang + 0.45), y2 - hs * Math.sin(ang + 0.45)); ctx.closePath(); ctx.fill();
+      const rr = (cp.big ? 11 : 7.5) * Math.min(2, 0.6 + z * 0.22);
+      ctx.setLineDash([5, 4]); ctx.lineDashOffset = -this.time * 10;
+      ctx.lineWidth = Math.max(1.4, Math.min(3, z * 0.5));
+      ctx.beginPath(); ctx.arc(x2, y2, rr, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+      if (cp.big) { ctx.globalAlpha = a1 * 0.55; ctx.beginPath(); ctx.arc(x2, y2, rr * 1.6, 0, 7); ctx.stroke(); }
+    }
+    ctx.globalAlpha = 1;
+    for (let wi = 0; wi < this.warPts.length; wi++) {
+      const wf = this.warPts[wi];
+      const pu = 0.7 + 0.3 * Math.sin(this.time * 4 + wi * 1.7);
+      const base = wf.trk ? 1.3 : 1;
+      for (const [wx, wy] of wf.pts) {
+        const [x, y] = this.w2s(wx, wy); if (x < -30 || y < -30 || x > this.cssW + 30 || y > this.cssH + 30) continue;
+        const r = Math.max(6, Math.min(15, 4.5 * Math.sqrt(z))) * base;
+        ctx.globalAlpha = 0.14 + 0.26 * pu;
+        ctx.fillStyle = wf.trk ? '#ffd24a' : '#ff4a3a';
+        ctx.beginPath(); ctx.arc(x, y, r * 1.7, 0, 7); ctx.fill();
+        ctx.globalAlpha = 0.95;
+        const L = r * 0.9 * (0.85 + 0.15 * pu);
+        ctx.lineCap = 'round';
+        ctx.lineWidth = Math.max(2, r * 0.3); ctx.strokeStyle = 'rgba(10,10,14,0.85)';
+        ctx.beginPath(); ctx.moveTo(x - L, y - L); ctx.lineTo(x + L, y + L); ctx.moveTo(x + L, y - L); ctx.lineTo(x - L, y + L); ctx.stroke();
+        ctx.lineWidth = Math.max(1.2, r * 0.16); ctx.strokeStyle = wf.trk ? '#ffe9a8' : '#ffd9d2';
+        ctx.beginPath(); ctx.moveTo(x - L, y - L); ctx.lineTo(x + L, y + L); ctx.moveTo(x + L, y - L); ctx.lineTo(x - L, y + L); ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1; ctx.lineCap = 'butt';
     // 도시
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const cityPlaced = []; const cityMin = z > 3 ? 1 : z > 2 ? 2 : z > 1.3 ? 3 : 4;

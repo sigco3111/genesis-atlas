@@ -29,6 +29,7 @@ export function createState(map, opts = {}) {
     P: { pop: new Float32Array(N), tech: new Float32Array(N), owner: new Int16Array(N).fill(-1), cult: new Int16Array(N).fill(-1), rel: new Int16Array(N).fill(-1), unrest: new Float32Array(N), city: new Uint8Array(N), fx: new Float32Array(N).fill(1), km: new Float32Array(N).fill(1), plague: new Uint8Array(N) },
     nations: [], cultures: [], religions: [], wars: [], truce: {}, log: [], hist: [], routes: [], cityName: new Array(N).fill(''), provName: new Array(N).fill(''),
     auto: !!opts.auto, aggr: opts.aggr ?? 1, worldFirst: {}, stats: {}, fr: null, nextWar: 1, track: null,
+    recentCaps: [],
     eventsOn: opts.events !== false, deaths: { war: 0, plague: 0, famine: 0 }, fxQueue: [],
   };
   if (S.mode === 'real') initReal(S, map, opts); else initEmergent(S, map, opts);
@@ -396,7 +397,7 @@ function stepWars(S, map) {
         const [p, q, ty] = pairs[rng.int(pairs.length)]; if (P.owner[p] === P.owner[q] || P.owner[p] < 0 || P.owner[q] < 0) continue;
         const defn = 1 + 0.45 * prv[q].e + P.city[q] * 0.1 + (ty ? 0.5 : 0);
         const pc = 0.42 / (1 + Math.exp(-(sAtk / (sDef * defn + 1) - 1) * 2.4));
-        if (rng.next() < pc) captureProvince(S, map, q, P.owner[q], P.owner[p], w);
+        if (rng.next() < pc) captureProvince(S, map, q, P.owner[q], P.owner[p], w, p);
       }
     };
     attempt(A, D, sA, sD); attempt(D, A, sD, sA);
@@ -409,13 +410,15 @@ function stepWars(S, map) {
     if (dcap || acap || ex > 1 || (dur >= 5 && rng.next() < 0.07 + ex * 0.15) || (dur >= 2 && Math.abs(sA - sD) / tot > 0.7 && rng.next() < 0.2)) endWar(S, map, w, dcap ? 'A' : acap ? 'D' : (w.sA > w.sD ? 'A' : w.sD > w.sA ? 'D' : ''));
   }
 }
-function captureProvince(S, map, q, from, to, w) {
+function captureProvince(S, map, q, from, to, w, src) {
   const P = S.P; const f = S.nations[from], t = S.nations[to]; if (!f.alive || !t.alive) return;
   const wasCap = f.cap === q;
   P.owner[q] = to; P.pop[q] *= 0.9; P.unrest[q] = 0.45; if (P.city[q] > 1 && S.rng.chance(0.4)) P.city[q]--;
   w[w.A.includes(to) ? 'sA' : 'sD'] += 1 + (P.city[q] ? 1 : 0) + (wasCap ? 3 : 0); S.deaths.war += P.pop[q] * 0.1;
   if (wasCap || P.city[q] >= 2) addLog(S, `${t.name}이(가) ${f.name}의 ${wasCap ? '수도 ' : ''}${S.cityName[q] || S.provName[q] || '도시'}을(를) 점령했습니다.`, wasCap ? 3 : 2, q, to);
   S.fxQueue.push([q, 'war']);
+  S.recentCaps.push({ p: src == null ? q : src, q, t: to, y: S.year, big: wasCap || P.city[q] >= 2 ? 1 : 0 });
+  if (S.recentCaps.length > 90) S.recentCaps.splice(0, S.recentCaps.length - 90);
 }
 export function endWar(S, map, w, winner) {
   S.wars = S.wars.filter((z) => z !== w);
@@ -545,7 +548,7 @@ export function restore(json) {
   const S = typeof json === 'string' ? JSON.parse(json) : json;
   if (!S.P.km) S.P.km = new Array(S.P.pop.length).fill(1);
   for (const k of Object.keys(TYPED)) S.P[k] = TYPED[k].from(S.P[k]);
-  const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1;
+  const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1; S.recentCaps = S.recentCaps || [];
   return S;
 }
 export { yearStr, numStr };
