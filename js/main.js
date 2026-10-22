@@ -153,7 +153,7 @@ async function save() { if (saving || !S) return; saving = true; try { const t =
 function bindInput() {
   const cv = $('map'); const pts = new Map(); let moved = 0, pd = 0;
   cv.addEventListener('pointerdown', (e) => { lastPtr = e.pointerType || 'mouse'; cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); moved = 0; pd = pts.size === 2 ? dist() : 0; });
-  cv.addEventListener('pointerleave', () => { if (selPower && !pwPending) { R.setPowerPreview(null); $('pwhint').classList.add('hide'); } });
+  cv.addEventListener('pointerleave', () => { if (selPower && !pwPending) { R.setPowerPreview(null); pwEl('pwhint').classList.add('hide'); } });
   cv.addEventListener('pointermove', (e) => {
     if (!pts.has(e.pointerId)) { R.hover = R.provAt(e.clientX, e.clientY); if (selPower) updatePowerPreview(R.hover); return; }
     const o = pts.get(e.pointerId); const dx = e.clientX - o[0], dy = e.clientY - o[1]; pts.set(e.pointerId, [e.clientX, e.clientY]); moved += Math.abs(dx) + Math.abs(dy);
@@ -171,10 +171,22 @@ let selPower = null;
 const PW_GOOD = new Set(['bless', 'tribe', 'prophet', 'hero', 'peace']);
 const PW_ICON = { bless: '🌧', drought: '🏜', plague: '☠', quake: '💥', volcano: '🌋', meteor: '☄', tribe: '🛖', prophet: '📿', hero: '⭐', revolt: '🔥', peace: '🕊', war: '⚔' };
 let pwPending = null, lastPtr = 'mouse';
+// 힌트/결과 카드: CSS나 HTML이 캐시로 섞여도 깨지지 않도록 필수 스타일을 JS가 보장한다.
+function pwEl(id) {
+  let el = $(id);
+  if (!el) { el = document.createElement('div'); el.id = id; el.className = 'hide'; document.body.appendChild(el); }
+  if (!el.dataset.fixed) {
+    el.dataset.fixed = '1';
+    el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);background:#0a1a2bee;border:1px solid #3a5f86;border-radius:12px;padding:8px 14px;z-index:6;font-size:13px;max-width:92vw;text-align:center;box-shadow:0 4px 16px #0008;color:#e8eef5';
+  }
+  el.style[isMobileLayout() ? 'top' : 'bottom'] = isMobileLayout() ? '44px' : '84px';
+  el.style[isMobileLayout() ? 'bottom' : 'top'] = 'auto';
+  return el;
+}
 function touchUI() { return (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || lastPtr === 'touch'; }
 function powerColor(type, ok) { return !ok ? '#9aa7b5' : PW_GOOD.has(type) ? '#7fe08a' : '#ff6a55'; }
 function updatePowerPreview(p) {
-  const hint = $('pwhint');
+  const hint = pwEl('pwhint');
   if (!selPower || p == null || p < 0) { R.setPowerPreview(null); hint.classList.add('hide'); return; }
   const a = sim.powerArea(S, map, selPower, p);
   R.setPowerPreview({ center: p, provs: a.provs, color: powerColor(selPower, a.ok) });
@@ -190,13 +202,13 @@ function updatePowerPreview(p) {
 function firePower(type, p) {
   const r = sim.applyPower(S, map, type, p);
   if (!r.ok) { toast(r.msg); pwPending = null; updatePowerPreview(p); return; }
-  pwPending = null; R.setPowerPreview(null); $('pwhint').classList.add('hide');
+  pwPending = null; R.setPowerPreview(null); pwEl('pwhint').classList.add('hide');
   toast((PW_ICON[type] || '') + ' ' + sim.POWERS[type].name + ' 발동');
   showPowerResult(type, p, r.diff);
   needRefresh = true; R.sel = p; R.paintHL();
 }
 function showPowerResult(type, p, d) {
-  const el = $('pwres'); if (!d) { el.classList.add('hide'); return; }
+  const el = pwEl('pwres'); if (!d) { el.classList.add('hide'); return; }
   const nm = S.provName[p] || '';
   let h = `<div class="prhead">${PW_ICON[type] || ''} ${sim.POWERS[type].name} 결과${nm ? ' — ' + nm : ''}</div>`;
   const lines = [];
@@ -265,7 +277,7 @@ function renderPanel(auto) {
   for (const a of body.querySelectorAll('[data-n]')) a.onclick = (e) => { e.preventDefault(); const n = S.nations[+a.dataset.n]; R.sel = n.cap; R.paintHL(); R.focus(n.cap, 3); tab = 'sel'; renderPanel(); };
   for (const a of body.querySelectorAll('[data-w]')) a.onclick = (e) => { e.preventDefault(); setTracking(+a.dataset.w); };
   for (const b of body.querySelectorAll('[data-trk]')) b.onclick = () => setTracking(+b.dataset.trk);
-  for (const b of body.querySelectorAll('[data-p]')) b.onclick = () => { selPower = selPower === b.dataset.p ? null : b.dataset.p; pwPending = null; if (!selPower) { R.setPowerPreview(null); $('pwhint').classList.add('hide'); } toast(selPower ? '지도에 영향 범위가 보입니다. 대상 지역을 누르세요' : '취소'); panelSig = ''; renderPanel(); };
+  for (const b of body.querySelectorAll('[data-p]')) b.onclick = () => { selPower = selPower === b.dataset.p ? null : b.dataset.p; pwPending = null; if (!selPower) { R.setPowerPreview(null); pwEl('pwhint').classList.add('hide'); } toast(selPower ? '지도에 영향 범위가 보입니다. 대상 지역을 누르세요' : '취소'); panelSig = ''; renderPanel(); };
   const q = (id) => body.querySelector('#' + id);
   if (q('autoBtn')) q('autoBtn').onclick = () => { S.auto = !S.auto; panelSig = ''; renderPanel(); };
   if (q('bSave')) q('bSave').onclick = () => { save(); toast('저장했습니다'); };
