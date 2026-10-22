@@ -88,13 +88,15 @@ function setPanelOpen(open, save = true) {
   updateHandle();
 }
 function updateHandle() {
-  const h = $('panelHandle'); if (!h) return;
+  const h = $('panelHandle'); const f = $('panelFold');
   const open = $('panel').classList.contains('open');
-  h.textContent = isMobileLayout() ? (open ? '\u25be' : '\u25b4') : (open ? '\u25b6' : '\u25c0');
-  h.title = open ? '패널 접기' : '패널 펼치기';
+  const mob = isMobileLayout();
+  if (h) { h.textContent = open ? (mob ? '\u25be 패널 접기' : '패널 접기') : (mob ? '\u25b4 패널 펼치기' : '패널 펼치기'); h.title = open ? '패널 접기' : '패널 펼치기'; }
+  if (f) f.textContent = (mob ? '\u25be' : '\u25c0') + ' 패널 접기';
 }
 $('menuBtn').onclick = () => setPanelOpen(!$('panel').classList.contains('open'));
 $('panelHandle').onclick = () => setPanelOpen(!$('panel').classList.contains('open'));
+$('panelFold').onclick = () => setPanelOpen(false);
 window.addEventListener('resize', updateHandle);
 
 // ---------- 루프 ----------
