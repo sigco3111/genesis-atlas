@@ -300,7 +300,7 @@ function stepNations(S, map) {
     if (n.pc < capN && n.stab > 0.3 && rng.next() < 0.11 * (0.5 + n.lead.exp)) expand(S, map, n);
     if (n.stab < 0.1 && n.pc >= 4 && rng.next() < 0.08) collapse(S, map, n);
     if (n.pop < 3 && n.pc <= 2) { for (let p = 0; p < N; p++) if (P.owner[p] === n.id) P.owner[p] = -1; killNation(S, n, '인구가 끊겨'); continue; }
-    if (wc < 1 && n.stab > 0.35 && rng.next() < 0.028 * S.aggr * (0.35 + n.lead.war) / (1 + 1.1 * Math.max(0, n.tech - 5.5))) declareWar(S, map, n);
+    if (wc < 1 && n.stab > 0.35 && !(S.mode === 'real' && S.year < 2041) && rng.next() < 0.028 * S.aggr * (0.35 + n.lead.war) / (1 + 3.5 * Math.max(0, n.tech - 5.5)) / (S.mode === 'real' && S.year < 2126 ? 2.5 : 1)) declareWar(S, map, n);
   }
 }
 export const traitText = (l) => { const t = []; if (l.war > 1.25) t.push('호전적'); if (l.exp > 1.25) t.push('팽창주의'); if (l.sci > 1.25) t.push('학문 장려'); if (l.trade > 1.25) t.push('교역 중시'); if (l.faith > 1.25) t.push('독실함'); if (l.war < 0.7) t.push('온건'); return t.length ? t.join('·') : '평범한 통치'; };
