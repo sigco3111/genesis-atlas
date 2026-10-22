@@ -11,7 +11,7 @@ for (const k of MAP_KINDS) for (const mode of k.id === 'earth' ? ['emergent', 'r
   for (const key of ['pop', 'tech', 'unrest']) ok(!S.P[key].some((v) => !Number.isFinite(v)), `${k.id}/${mode} NaN in ${key}`);
   ok(S.stats.world > 0, `${k.id}/${mode} world pop > 0`);
   const R = sim.restore(sim.serialize(S)); try { for (let i = 0; i < 20; i++) sim.step(R, map); } catch (e) { ok(false, `${k.id}/${mode} restore step ${e.message}`); }
-  for (const p of Object.keys(sim.POWERS)) { const r = sim.applyPower(R, map, p, 100); ok(typeof r.ok === 'boolean', 'power ' + p); R.mana = 100; }
+  for (const p of Object.keys(sim.POWERS)) { const r = sim.applyPower(R, map, p, 100); ok(typeof r.ok === 'boolean', 'power ' + p); }
   console.log(k.id, mode, 'ok year', S.year, 'pop', Math.round(S.stats.world), 'nations', S.stats.alive);
 }
 console.log(fail ? 'FAILED ' + fail : 'ALL OK'); process.exit(fail ? 1 : 0);

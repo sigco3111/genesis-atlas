@@ -6,18 +6,18 @@ export const VERSION = 1;
 const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
 
 export const POWERS = {
-  bless: { name: '풍요의 비', cost: 12, desc: '선택 지역과 인접 지역의 땅이 수십 년간 기름져집니다.' },
-  drought: { name: '가뭄', cost: 12, desc: '지역에 대가뭄을 내립니다. 인구와 안정도가 흔들립니다.' },
-  plague: { name: '역병', cost: 18, desc: '지역에 역병을 퍼뜨립니다. 이웃으로 번집니다.' },
-  quake: { name: '지진', cost: 15, desc: '지역과 도시에 피해를 줍니다.' },
-  volcano: { name: '화산 폭발', cost: 22, desc: '큰 피해를 주지만 이후 땅이 비옥해집니다.' },
-  meteor: { name: '운석', cost: 28, desc: '지역 전체를 강타합니다. 인접 지역도 큰 피해를 입습니다.' },
-  tribe: { name: '새 부족 탄생', cost: 20, desc: '사람이 없는 빈 땅에 새 부족을 내려보냅니다.' },
-  prophet: { name: '예언자', cost: 15, desc: '지역에 새 신앙을 일으키고 주변으로 퍼뜨립니다.' },
-  hero: { name: '영웅 강림', cost: 20, desc: '해당 국가에 영웅이 나타나 안정도와 학문이 오릅니다.' },
-  revolt: { name: '민중 봉기', cost: 18, desc: '지역의 불만을 폭발시켜 독립을 부추깁니다.' },
-  peace: { name: '평화의 신탁', cost: 16, desc: '해당 국가가 치르는 모든 전쟁을 끝냅니다.' },
-  war: { name: '전쟁의 불씨', cost: 16, desc: '이웃과의 관계를 악화시켜 전쟁을 부추깁니다.' },
+  bless: { name: '풍요의 비', desc: '선택 지역과 인접 지역의 땅이 수십 년간 기름져집니다.' },
+  drought: { name: '가뭄', desc: '지역에 대가뭄을 내립니다. 인구와 안정도가 흔들립니다.' },
+  plague: { name: '역병', desc: '지역에 역병을 퍼뜨립니다. 이웃으로 번집니다.' },
+  quake: { name: '지진', desc: '지역과 도시에 피해를 줍니다.' },
+  volcano: { name: '화산 폭발', desc: '큰 피해를 주지만 이후 땅이 비옥해집니다.' },
+  meteor: { name: '운석', desc: '지역 전체를 강타합니다. 인접 지역도 큰 피해를 입습니다.' },
+  tribe: { name: '새 부족 탄생', desc: '사람이 없는 빈 땅에 새 부족을 내려보냅니다.' },
+  prophet: { name: '예언자', desc: '지역에 새 신앙을 일으키고 주변으로 퍼뜨립니다.' },
+  hero: { name: '영웅 강림', desc: '해당 국가에 영웅이 나타나 안정도와 학문이 오릅니다.' },
+  revolt: { name: '민중 봉기', desc: '지역의 불만을 폭발시켜 독립을 부추깁니다.' },
+  peace: { name: '평화의 신탁', desc: '해당 국가가 치르는 모든 전쟁을 끝냅니다.' },
+  war: { name: '전쟁의 불씨', desc: '이웃과의 관계를 악화시켜 전쟁을 부추깁니다.' },
 };
 
 export function createState(map, opts = {}) {
@@ -28,7 +28,7 @@ export function createState(map, opts = {}) {
     v: VERSION, seed, mapKind: map.kind, mode: opts.mode || 'emergent', year: 0, rng, techRate: opts.techRate ?? 1,
     P: { pop: new Float32Array(N), tech: new Float32Array(N), owner: new Int16Array(N).fill(-1), cult: new Int16Array(N).fill(-1), rel: new Int16Array(N).fill(-1), unrest: new Float32Array(N), city: new Uint8Array(N), fx: new Float32Array(N).fill(1), km: new Float32Array(N).fill(1), plague: new Uint8Array(N) },
     nations: [], cultures: [], religions: [], wars: [], truce: {}, log: [], hist: [], routes: [], cityName: new Array(N).fill(''), provName: new Array(N).fill(''),
-    mana: 60, auto: !!opts.auto, aggr: opts.aggr ?? 1, worldFirst: {}, stats: {}, fr: null, nextWar: 1,
+    auto: !!opts.auto, aggr: opts.aggr ?? 1, worldFirst: {}, stats: {}, fr: null, nextWar: 1,
     eventsOn: opts.events !== false, deaths: { war: 0, plague: 0, famine: 0 }, fxQueue: [],
   };
   if (S.mode === 'real') initReal(S, map, opts); else initEmergent(S, map, opts);
@@ -211,7 +211,6 @@ export function step(S, map) {
   if (S.eventsOn) stepEvents(S, map);
   if (S.year % 5 === 0) stepDiplomacy(S, map);
   if (S.year % 10 === 0) { stepGov(S, map); sampleHistory(S); if (S.auto) autoGod(S, map); }
-  S.mana = Math.min(100, S.mana + 0.12);
   eraCheck(S, map);
 }
 
@@ -486,7 +485,6 @@ export function disaster(S, map, kind, p) {
 // ---------- 신의 권능 ----------
 export function applyPower(S, map, type, p) {
   const pw = POWERS[type]; if (!pw) return { ok: false, msg: '알 수 없는 권능' };
-  if (S.mana < pw.cost) return { ok: false, msg: '신력이 부족합니다' };
   const P = S.P, ow = P.owner[p]; const nm = S.provName[p] || '이 땅'; let ok = true, msg = '';
   const needNation = () => { if (ow < 0) { ok = false; msg = '국가가 있는 땅에서 쓰세요'; return true; } return false; };
   switch (type) {
@@ -503,14 +501,12 @@ export function applyPower(S, map, type, p) {
     case 'peace': { if (needNation()) break; const ws = S.wars.filter((w) => w.A.includes(ow) || w.D.includes(ow)); if (!ws.length) { ok = false; msg = '전쟁 중이 아닙니다'; break; } for (const w of ws) endWar(S, map, w, ''); addLog(S, `평화의 신탁이 내려 ${S.nations[ow].name}의 전쟁이 멈췄습니다.`, 2, p, ow); break; }
     case 'war': { if (needNation()) break; const n = S.nations[ow]; const nb = [...neighborsOf(S, n).keys()]; if (!nb.length) { ok = false; msg = '이웃 국가가 없습니다'; break; } const m = S.nations[S.rng.pick(nb)]; n.relat[m.id] = -90; m.relat[n.id] = -90; delete S.truce[tkey(n.id, m.id)]; startWar(S, map, n, m, '(신의 속삭임)'); break; }
   }
-  if (ok) S.mana -= pw.cost;
   return { ok, msg };
 }
 
 export function autoGod(S, map) {
   const rng = S.rng, P = S.P; const alive = S.nations.filter((n) => n.alive); const total = S.stats.world || 1;
   const say = (t) => addLog(S, `[자동 신] ${t}`, 1);
-  if (S.mana < 20) return;
   if (alive.length < 3 && total > 100) { const p = pickProvince(S, map, (q) => P.pop[q] < 2 && map.provinces[q].fert > 0.4 && map.provinces[q].a > 8000); if (p >= 0 && applyPower(S, map, 'tribe', p).ok) { say('문명이 너무 줄어 새 부족을 일으켰습니다.'); return; } }
   const big = [...alive].sort((a, b) => b.pop - a.pop)[0];
   if (big && big.pop / total > 0.38 && big.pc > 8 && rng.chance(0.5)) { let p = -1, bp = 0; for (let q = 0; q < P.owner.length; q++) if (P.owner[q] === big.id && q !== big.cap && P.unrest[q] > bp) { bp = P.unrest[q]; p = q; } if (p >= 0 && applyPower(S, map, 'revolt', p).ok) { say(`${big.name}의 독주를 견제하려 봉기를 부추겼습니다.`); return; } }

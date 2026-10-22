@@ -109,7 +109,6 @@ function loop(t) { if (!loop.n) console.log('loop1'); loop.n = (loop.n || 0) + 1
     while (acc >= 1 && n < 600) { sim.step(S, map); acc -= 1; n++; if (performance.now() > budget) { acc = Math.min(acc, 1); break; } }
     if (n) needRefresh = true;
     if (S.auto && n) for (let i = 0; i < Math.min(n, 3); i++) sim.autoGod(S, map);
-    S.mana = Math.min(100, S.mana + dt * 0.6 * Math.min(speed, 20) / 5);
   }
   for (const f of S.fxQueue.splice(0)) if (speed < 20) R.addEffect(f[0], f[1], f[1] === 'war' ? '#ff5050' : f[1] === 'plague' ? '#9be26a' : '#ffd27a');
   if (S.log.length) { const lg = S.log; let i = lg.length - 1; while (i >= 0 && lg[i] !== loop.lastLog) i--; const fresh = i < 0 ? lg.slice(-1) : lg.slice(i + 1); loop.lastLog = lg[lg.length - 1];
@@ -181,14 +180,14 @@ function renderPanel(auto) {
   } else if (tab === 'log') {
     h = '<div class="log">' + S.log.slice(-80).reverse().map((l) => `<div class="i${l.i}">${yearStr(l.y)} · ${l.t}</div>`).join('') + '</div>';
   } else if (tab === 'god') {
-    h = `<h3>신력 ${Math.floor(S.mana)}/100</h3><div class="bar"><i style="width:${S.mana}%"></i></div><p>권능을 고른 뒤 지도의 지역을 누르세요.</p>` + Object.entries(sim.POWERS).map(([k, v]) => `<button class="pw ${selPower === k ? 'on' : ''}" data-p="${k}">${v.name} (${v.cost})<small>${v.desc}</small></button>`).join('');
+    h = '<h3>신의 권능</h3><p>권능을 고른 뒤 지도의 지역을 누르세요. 횟수 제한 없이 얼마든지 쓸 수 있습니다.</p>' + Object.entries(sim.POWERS).map(([k, v]) => `<button class="pw ${selPower === k ? 'on' : ''}" data-p="${k}">${v.name}<small>${v.desc}</small></button>`).join('');
     h += `<button class="pw ${S.auto ? 'on' : ''}" id="autoBtn">자동 신 위임: ${S.auto ? '켜짐' : '꺼짐'}<small>신이 알아서 균형을 맞춥니다.</small></button>`;
   } else {
     h = '<h3>도움말</h3><p class="fine">드래그로 이동, 휠/핀치로 확대. 지역을 누르면 정보가 나옵니다. 위쪽 버튼으로 속도와 지도 모드를 바꾸고, 권능 탭에서 신의 힘을 쓰거나 자동 신 위임을 켜 보세요. 아무것도 하지 않아도 세계는 계속 흘러갑니다.</p><h3>설정</h3><button class="pw" id="bSave">지금 저장</button><button class="pw" id="bExp">파일로 내보내기</button><button class="pw" id="bImp">파일에서 불러오기</button><button class="pw" id="bNew">새 세계 시작</button><input type="file" id="fImp" class="hide" accept=".json">';
     h += '<p class="fine">지도 데이터: Natural Earth (퍼블릭 도메인). 지구 국경은 근사이며 대체 역사입니다.</p>';
   }
   const sig = tab === 'god' ? 'god' + selPower + S.auto : tab + h.length + (tab === 'world' || tab === 'log' ? Math.floor(S.year / 5) : '');
-  if (auto && (sig === panelSig || tab === 'god' && false)) { if (tab === 'god') { const b = body.querySelector('.bar i'); if (b) b.style.width = S.mana + '%'; const hh = body.querySelector('h3'); if (hh) hh.textContent = `신력 ${Math.floor(S.mana)}/100`; } return; }
+  if (auto && sig === panelSig) return;
   panelSig = sig; body.innerHTML = h;
   for (const a of body.querySelectorAll('[data-n]')) a.onclick = (e) => { e.preventDefault(); const n = S.nations[+a.dataset.n]; R.sel = n.cap; R.paintHL(); R.focus(n.cap, 3); tab = 'sel'; renderPanel(); };
   for (const b of body.querySelectorAll('[data-p]')) b.onclick = () => { selPower = selPower === b.dataset.p ? null : b.dataset.p; toast(selPower ? '지도에서 대상 지역을 누르세요' : '취소'); panelSig = ''; renderPanel(); };
