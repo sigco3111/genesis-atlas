@@ -34,3 +34,4 @@ select,input{background:#12304d;border:1px solid #35597f;border-radius:8px;paddi
  #panel.open{transform:none}#menuBtn{display:block}
  #stats{display:none}#yr b{font-size:16px}
 }
+#tabBody a{color:#9fd0ff}#tabBody a:visited{color:#c6b3ff}
