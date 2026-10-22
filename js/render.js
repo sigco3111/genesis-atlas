@@ -202,14 +202,14 @@ export class Renderer {
     }
     // 도시
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const cityMin = z > 3 ? 1 : z > 2 ? 2 : z > 1.3 ? 3 : 4;
+    const cityPlaced = []; const cityMin = z > 3 ? 1 : z > 2 ? 2 : z > 1.3 ? 3 : 4;
     for (let p = 0; p < map.provinces.length; p++) {
       const lv = S.P.city[p]; if (lv < cityMin) continue; const o = map.provinces[p];
       const [x, y] = this.w2s(o.ax, o.ay); if (x < -20 || y < -20 || x > this.cssW + 20 || y > this.cssH + 20) continue;
       const cap = S.P.owner[p] >= 0 && S.nations[S.P.owner[p]].cap === p; const r = (1.4 + lv * 0.9 + (cap ? 1.4 : 0)) * Math.min(2.2, 0.7 + z * 0.22);
       ctx.fillStyle = '#1b1612'; ctx.beginPath(); ctx.arc(x, y, r + 1.2, 0, 7); ctx.fill();
       ctx.fillStyle = cap ? '#ffd24a' : '#fff6e0'; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
-      if (z > 4.5 && S.P.city[p] && S.cityName[p]) { ctx.font = `600 ${Math.min(14, 9 + z * 0.5)}px "Noto Sans KR", system-ui, sans-serif`; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.fillStyle = '#fff'; ctx.strokeText(S.cityName[p], x, y + r + 9); ctx.fillText(S.cityName[p], x, y + r + 9); }
+      if (z > 4.5 && S.P.city[p] && S.cityName[p]) { const fz = Math.min(14, 9 + z * 0.5); ctx.font = `600 ${fz}px "Noto Sans KR", system-ui, sans-serif`; const cw = ctx.measureText(S.cityName[p]).width; const cb = [x - cw / 2 - 2, y + r + 2, x + cw / 2 + 2, y + r + 12 + fz]; if (cityPlaced.some((q) => !(cb[2] < q[0] || cb[0] > q[2] || cb[3] < q[1] || cb[1] > q[3]))) continue; cityPlaced.push(cb); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.fillStyle = '#fff'; ctx.strokeText(S.cityName[p], x, y + r + 9); ctx.fillText(S.cityName[p], x, y + r + 9); }
     }
     // 국가 라벨
     const fs = (l) => Math.max(0, Math.min(34, (6 + Math.sqrt(l.big) * 3.6) * Math.min(1.6, z * 0.9)));

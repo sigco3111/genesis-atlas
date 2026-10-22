@@ -11,7 +11,7 @@ button:hover{background:#27507a}button.on{background:#3b7bc4;border-color:#8cc0f
 #speed,#modes{display:flex;gap:4px;flex-wrap:wrap}
 #speed button,#modes button{padding:4px 8px;font-size:13px}
 #menuBtn{display:none;margin-left:auto}
-#panel{position:fixed;right:0;top:44px;bottom:0;width:340px;background:#0a1a2bec;border-left:1px solid #284766;display:flex;flex-direction:column}
+#panel{position:fixed;right:0;top:44px;bottom:0;width:340px;background:#0a1a2b;box-shadow:-6px 0 18px #0009;border-left:1px solid #284766;display:flex;flex-direction:column}
 #tabs{display:flex;gap:2px;padding:6px}#tabs button{flex:1;padding:6px 2px;font-size:13px}
 #tabBody{flex:1;overflow:auto;padding:8px 12px 20px}
 #tabBody h3{margin:12px 0 4px;font-size:15px;color:#ffd27a}
@@ -35,4 +35,4 @@ select,input{background:#12304d;border:1px solid #35597f;border-radius:8px;paddi
  #stats{display:none}#yr b{font-size:16px}
 }
 #tabBody a{color:#9fd0ff}#tabBody a:visited{color:#c6b3ff}
-@media(max-width:760px){#toast{bottom:auto;top:96px;width:88%;text-align:center;border-radius:14px}}
+@media(max-width:760px){#toast{bottom:auto;top:128px;z-index:6;background:#000e;width:88%;text-align:center;border-radius:14px}}
