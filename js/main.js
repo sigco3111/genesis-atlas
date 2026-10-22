@@ -49,7 +49,7 @@ $('cont').onclick = async () => {
 function boot() { console.log('boot', S.mode, S.year);
   $('start').classList.add('hide');
   R = new Renderer($('map'), map); if (!boot.done) { boot.done = true; bindInput(); window.addEventListener('resize', () => { R.resize(); needRefresh = true; }); requestAnimationFrame(loop); }
-  R.terrainKind = map.kind + map.seed; R.fit(); R.mode = 'political'; R.sel = -1; speed = window.__speed ?? 5; running = true; needRefresh = true; buildBars(); renderPanel();
+  R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = 'political'; R.sel = -1; speed = window.__speed ?? 5; running = true; needRefresh = true; buildBars(); renderPanel();
   toast('휠·드래그로 이동, 지역을 눌러 살펴보세요');
 }
 function buildBars() {
@@ -144,7 +144,7 @@ function renderPanel(auto) {
     h = `<h3>신력 ${Math.floor(S.mana)}/100</h3><div class="bar"><i style="width:${S.mana}%"></i></div><p>권능을 고른 뒤 지도의 지역을 누르세요.</p>` + Object.entries(sim.POWERS).map(([k, v]) => `<button class="pw ${selPower === k ? 'on' : ''}" data-p="${k}">${v.name} (${v.cost})<small>${v.desc}</small></button>`).join('');
     h += `<button class="pw ${S.auto ? 'on' : ''}" id="autoBtn">자동 신 위임: ${S.auto ? '켜짐' : '꺼짐'}<small>신이 알아서 균형을 맞춥니다.</small></button>`;
   } else {
-    h = '<h3>설정</h3><button class="pw" id="bSave">지금 저장</button><button class="pw" id="bExp">파일로 내보내기</button><button class="pw" id="bImp">파일에서 불러오기</button><button class="pw" id="bNew">새 세계 시작</button><input type="file" id="fImp" class="hide" accept=".json">';
+    h = '<h3>도움말</h3><p class="fine">드래그로 이동, 휠/핀치로 확대. 지역을 누르면 정보가 나옵니다. 위쪽 버튼으로 속도와 지도 모드를 바꾸고, 권능 탭에서 신의 힘을 쓰거나 자동 신 위임을 켜 보세요. 아무것도 하지 않아도 세계는 계속 흘러갑니다.</p><h3>설정</h3><button class="pw" id="bSave">지금 저장</button><button class="pw" id="bExp">파일로 내보내기</button><button class="pw" id="bImp">파일에서 불러오기</button><button class="pw" id="bNew">새 세계 시작</button><input type="file" id="fImp" class="hide" accept=".json">';
     h += '<p class="fine">지도 데이터: Natural Earth (퍼블릭 도메인). 지구 국경은 근사이며 대체 역사입니다.</p>';
   }
   const sig = tab + h.length + (tab === 'world' || tab === 'log' ? Math.floor(S.year / 5) : '');
