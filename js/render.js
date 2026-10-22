@@ -164,7 +164,7 @@ export class Renderer {
     const { start, idx } = this.cells; ctx.fillStyle = 'rgba(255,255,255,0.28)';
     for (let k = start[p]; k < start[p + 1]; k++) { const i = idx[k]; const x = i % W, y = (i / W) | 0; ctx.fillRect(x * 2, y * 2, 2, 2); }
   }
-  addEffect(p, kind, color) { const o = this.map.provinces[p]; this.effects.push({ x: o.ax, y: o.ay, kind, color: color || '#fff', t: 0 }); if (this.effects.length > 60) this.effects.shift(); }
+  addEffect(p, kind, color) { const o = this.map.provinces[p]; this.effects.push({ x: o.ax, y: o.ay, kind, color: color || '#fff', t: 0 }); if (kind === "war" && this.effects.length > 14) return; if (this.effects.length > 30) this.effects.shift(); }
   draw(dt, S) {
     this.time += dt; const ctx = this.ctx, c = this.cam, dpr = this.dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -196,7 +196,7 @@ export class Renderer {
     }
     // 도시
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const cityMin = z > 3 ? 1 : z > 1.8 ? 2 : 3;
+    const cityMin = z > 3 ? 1 : z > 2 ? 2 : z > 1.3 ? 3 : 4;
     for (let p = 0; p < map.provinces.length; p++) {
       const lv = S.P.city[p]; if (lv < cityMin) continue; const o = map.provinces[p];
       const [x, y] = this.w2s(o.ax, o.ay); if (x < -20 || y < -20 || x > this.cssW + 20 || y > this.cssH + 20) continue;

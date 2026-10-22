@@ -5,7 +5,12 @@
 **플레이: https://sigco3111.github.io/genesis-atlas/**
 
 ![현실 지구, 현재의 세계로 시작](docs/real.png)
+![현재의 세계에서 200년이 흐른 모습](docs/real_2200.png)
 ![태초부터 시작해 500년/초로 진행한 모습](docs/emergent.png)
+
+모바일 화면: 지역을 누르면 하단 패널에 상세 정보가 열립니다.
+
+<img src="docs/mobile.png" width="260">
 
 ## 무엇을 할 수 있나
 
