@@ -4,8 +4,8 @@ import * as sim from './sim.js';
 import { yearStr, numStr, ERA_NAMES } from './names.js';
 const $ = (id) => document.getElementById(id);
 const SAVE = 'genesis-atlas-save-v1';
-let map = null, S = null, R = null, running = false, speed = 5, acc = 0, last = 0, tab = 'world', lastRefresh = 0, needRefresh = true, earthCache = null;
-const SPEEDS = [[0, '⏸'], [1, '1'], [5, '5'], [20, '20'], [100, '100'], [500, '500']];
+let map = null, S = null, R = null, running = false, speed = 1, prevSpeed = 1, acc = 0, last = 0, tab = 'world', lastRefresh = 0, needRefresh = true, earthCache = null;
+const SPEEDS = [[0, '⏸'], [0.5, '0.5'], [1, '1'], [3, '3'], [10, '10'], [100, '100']];
 const MODES = [['political', '정치'], ['culture', '문화'], ['religion', '종교'], ['pop', '인구'], ['tech', '기술'], ['unrest', '불안'], ['terrain', '지형']];
 
 function toast(t) { const e = $('toast'); e.textContent = t; e.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => e.classList.remove('show'), 2400); }
@@ -68,17 +68,17 @@ $('cont').onclick = async () => {
 function boot() { console.log('boot', S.mode, S.year);
   $('start').classList.add('hide');
   R = new Renderer($('map'), map); if (!boot.done) { boot.done = true; bindInput(); window.addEventListener('resize', () => { R.resize(); needRefresh = true; }); requestAnimationFrame(loop); }
-  R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = 'political'; R.sel = -1; speed = window.__speed ?? 5; running = true; needRefresh = true; buildBars(); renderPanel();
+  R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = 'political'; R.sel = -1; speed = window.__speed ?? 1; running = true; needRefresh = true; buildBars(); renderPanel();
   let pref = null; try { pref = localStorage.getItem(PANEL_PREF); } catch (e) {}
   setPanelOpen(pref === null ? !isMobileLayout() : pref === '1', false);
   toast('휠·드래그로 이동, 지역을 눌러 살펴보세요');
 }
 function buildBars() {
-  $('speed').innerHTML = ''; for (const [v, t] of SPEEDS) { const b = document.createElement('button'); b.textContent = t; b.dataset.v = v; b.title = v ? v + '년/초' : '일시정지'; b.onclick = () => { speed = v; markBars(); }; $('speed').appendChild(b); }
+  $('speed').innerHTML = ''; for (const [v, t] of SPEEDS) { const b = document.createElement('button'); b.textContent = t; b.dataset.v = v; b.title = v ? (v >= 1 ? '1초에 ' + v + '년' : (1 / v) + '초에 1년') : '일시정지'; b.onclick = () => { speed = v; if (v > 0) prevSpeed = v; markBars(); }; $('speed').appendChild(b); }
   $('modes').innerHTML = ''; for (const [v, t] of MODES) { const b = document.createElement('button'); b.textContent = t; b.dataset.m = v; b.onclick = () => { R.mode = v; needRefresh = true; markBars(); }; $('modes').appendChild(b); }
   markBars();
 }
-function markBars() { for (const b of $('speed').children) b.classList.toggle('on', +b.dataset.v === speed); for (const b of $('modes').children) b.classList.toggle('on', b.dataset.m === R.mode); }
+function markBars() { $('rate').textContent = speed ? (speed >= 1 ? '· 1초에 ' + speed + '년' : '· ' + 1 / speed + '초에 1년') : '· 일시정지'; for (const b of $('speed').children) b.classList.toggle('on', +b.dataset.v === speed); for (const b of $('modes').children) b.classList.toggle('on', b.dataset.m === R.mode); }
 // ---------- 패널 접기/펼치기 ----------
 const PANEL_PREF = 'genesis-atlas-panel';
 const isMobileLayout = () => window.innerWidth <= 760;
@@ -148,7 +148,7 @@ function bindInput() {
   cv.addEventListener('wheel', (e) => { e.preventDefault(); R.zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
   const dist = () => { const a = [...pts.values()]; return Math.hypot(a[0][0] - a[1][0], a[0][1] - a[1][1]); };
   const mid = () => { const a = [...pts.values()]; return [(a[0][0] + a[1][0]) / 2, (a[0][1] + a[1][1]) / 2]; };
-  window.addEventListener('keydown', (e) => { if (e.key === ' ') { speed = speed ? 0 : 5; markBars(); e.preventDefault(); } });
+  window.addEventListener('keydown', (e) => { if (e.key === ' ') { speed = speed ? 0 : prevSpeed; markBars(); e.preventDefault(); } });
 }
 let selPower = null;
 function select(p) {
