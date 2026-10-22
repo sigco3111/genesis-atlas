@@ -48,7 +48,16 @@ function newReligion(S, rng, cult, p, year) {
   S.religions.push({ id, name: genReligion(S.cultures[Math.max(0, cult)].lang, rng), rgb: hslToRgb(hue, rng.range(50, 75), rng.range(50, 62)), year, origin: p });
   return id;
 }
+const JOSA = { '이(가)': ['이', '가'], '을(를)': ['을', '를'], '은(는)': ['은', '는'], '와(과)': ['과', '와'] };
+export function josa(t) {
+  return t.replace(/(\S)(이\(가\)|을\(를\)|은\(는\)|와\(과\))/g, (m, c, j) => {
+    const code = c.charCodeAt(0); let fin;
+    if (code >= 0xac00 && code <= 0xd7a3) fin = (code - 0xac00) % 28 !== 0; else fin = '0136780'.includes(c) || 'lmnLMN'.includes(c) && false;
+    return c + JOSA[j][fin ? 0 : 1];
+  });
+}
 export function addLog(S, txt, imp = 1, p = -1, n = -1) {
+  txt = josa(txt);
   S.log.push({ y: S.year, t: txt, i: imp, p, n });
   if (S.log.length > 900) S.log.splice(0, 150);
 }
@@ -291,7 +300,7 @@ function stepNations(S, map) {
     if (n.pc < capN && n.stab > 0.3 && rng.next() < 0.11 * (0.5 + n.lead.exp)) expand(S, map, n);
     if (n.stab < 0.1 && n.pc >= 4 && rng.next() < 0.08) collapse(S, map, n);
     if (n.pop < 3 && n.pc <= 2) { for (let p = 0; p < N; p++) if (P.owner[p] === n.id) P.owner[p] = -1; killNation(S, n, '인구가 끊겨'); continue; }
-    if (wc < 1 && n.stab > 0.35 && rng.next() < 0.028 * S.aggr * (0.35 + n.lead.war) / (1 + 0.55 * Math.max(0, n.tech - 6))) declareWar(S, map, n);
+    if (wc < 1 && n.stab > 0.35 && rng.next() < 0.028 * S.aggr * (0.35 + n.lead.war) / (1 + 1.1 * Math.max(0, n.tech - 5.5))) declareWar(S, map, n);
   }
 }
 export const traitText = (l) => { const t = []; if (l.war > 1.25) t.push('호전적'); if (l.exp > 1.25) t.push('팽창주의'); if (l.sci > 1.25) t.push('학문 장려'); if (l.trade > 1.25) t.push('교역 중시'); if (l.faith > 1.25) t.push('독실함'); if (l.war < 0.7) t.push('온건'); return t.length ? t.join('·') : '평범한 통치'; };

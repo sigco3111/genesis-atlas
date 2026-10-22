@@ -49,7 +49,7 @@ $('cont').onclick = async () => {
 function boot() { console.log('boot', S.mode, S.year);
   $('start').classList.add('hide');
   R = new Renderer($('map'), map); if (!boot.done) { boot.done = true; bindInput(); window.addEventListener('resize', () => { R.resize(); needRefresh = true; }); requestAnimationFrame(loop); }
-  R.terrainKind = map.kind + map.seed; R.fit(); R.mode = 'political'; R.sel = -1; speed = 5; running = true; needRefresh = true; buildBars(); renderPanel();
+  R.terrainKind = map.kind + map.seed; R.fit(); R.mode = 'political'; R.sel = -1; speed = window.__speed ?? 5; running = true; needRefresh = true; buildBars(); renderPanel();
   toast('휠·드래그로 이동, 지역을 눌러 살펴보세요');
 }
 function buildBars() {
@@ -148,4 +148,4 @@ function renderPanel(auto) {
   if (q('fImp')) q('fImp').onchange = async (e) => { try { localStorage.setItem(SAVE, await e.target.files[0].text()); $('cont').click(); } catch (x) { toast('불러오기 실패'); } };
   const sp = q('spark'); if (sp) { const c = sp.getContext('2d'), hs = S.hist; c.strokeStyle = '#6db3ff'; c.beginPath(); const mx = Math.max(1, ...hs.map((x) => x.pop)); hs.forEach((x, i) => { const v = x.pop; const X = i / Math.max(1, hs.length - 1) * 300, Y = 58 - v / mx * 54; i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.stroke(); }
 }
-{ const q = new URLSearchParams(location.search); if (q.has('map')) $('selMap').value = q.get('map'); if (q.has('mode')) $('selMode').value = q.get('mode'); if (q.has('auto')) { $('go').click(); window.__skip = +q.get('auto') || 0; if (q.has('speed')) setTimeout(() => { speed = +q.get('speed'); markBars(); }, 0); } }
+{ const q = new URLSearchParams(location.search); if (q.has('map')) $('selMap').value = q.get('map'); if (q.has('mode')) $('selMode').value = q.get('mode'); if (q.has('auto')) { $('go').click(); window.__skip = +q.get('auto') || 0; if (q.has('speed')) window.__speed = +q.get('speed'); } }
