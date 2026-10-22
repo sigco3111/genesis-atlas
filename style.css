@@ -35,3 +35,4 @@ select,input{background:#12304d;border:1px solid #35597f;border-radius:8px;paddi
  #stats{display:none}#yr b{font-size:16px}
 }
 #tabBody a{color:#9fd0ff}#tabBody a:visited{color:#c6b3ff}
+@media(max-width:760px){#toast{bottom:auto;top:96px;width:88%;text-align:center;border-radius:14px}}

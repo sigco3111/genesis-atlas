@@ -166,7 +166,7 @@ export class Renderer {
   }
   addEffect(p, kind, color) { const o = this.map.provinces[p]; this.effects.push({ x: o.ax, y: o.ay, kind, color: color || '#fff', t: 0 }); if (kind === "war" && this.effects.length > 14) return; if (this.effects.length > 30) this.effects.shift(); }
   draw(dt, S) {
-    this.time += dt; const ctx = this.ctx, c = this.cam, dpr = this.dpr;
+    this.time += dt; this.lastDt = Math.min(dt, 0.05); const ctx = this.ctx, c = this.cam, dpr = this.dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#0b2540'; ctx.fillRect(0, 0, this.cssW, this.cssH);
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
@@ -216,7 +216,7 @@ export class Renderer {
     }
     // 효과
     for (let i = this.effects.length - 1; i >= 0; i--) {
-      const e = this.effects[i]; e.t += 1 / 60; if (e.t > 2.4) { this.effects.splice(i, 1); continue; }
+      const e = this.effects[i]; e.t += this.lastDt || 1 / 60; if (e.t > 2.4) { this.effects.splice(i, 1); continue; }
       const [x, y] = this.w2s(e.x, e.y); const k = e.t / 2.4;
       ctx.globalAlpha = 1 - k; ctx.strokeStyle = e.color; ctx.lineWidth = 3 * (1 - k) + 1; ctx.beginPath(); ctx.arc(x, y, 6 + k * 46 * Math.min(2, 0.6 + z * 0.3), 0, 7); ctx.stroke();
       ctx.beginPath(); ctx.arc(x, y, 3 + k * 20, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;

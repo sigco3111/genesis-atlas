@@ -10,7 +10,7 @@
 
 모바일 화면: 지역을 누르면 하단 패널에 상세 정보가 열립니다.
 
-<img src="docs/mobile.png" width="260">
+<img src="docs/mobile.png" width="720">
 
 ## 무엇을 할 수 있나
 
