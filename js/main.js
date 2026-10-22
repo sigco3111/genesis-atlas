@@ -40,9 +40,9 @@ $('go').onclick = async () => {
 $('cont').onclick = async () => {
   $('loadmsg').textContent = '불러오는 중...';
   try {
-    const s = sim.restore(localStorage.getItem(SAVE)); map = await getMap(s.mapKind, s.seed); S = s;
+    const raw = await unpack(localStorage.getItem(SAVE)); const s = sim.restore(raw); map = await getMap(s.mapKind, s.seed); S = s;
     if (S.P.owner.length !== map.provinces.length) throw new Error('저장 데이터가 지도와 맞지 않습니다');
-    sim.step(sim.restore(localStorage.getItem(SAVE)), map); // 부팅 점검
+    sim.step(sim.restore(raw), map); // 부팅 점검
     boot();
   } catch (e) { $('loadmsg').textContent = '저장 데이터를 열 수 없어 폐기합니다: ' + e.message; localStorage.removeItem(SAVE); $('cont').classList.add('hide'); }
 };
@@ -80,8 +80,19 @@ function loop(t) { if (!loop.n) console.log('loop1'); loop.n = (loop.n || 0) + 1
   if (t - (loop.pt || 0) > 800) { loop.pt = t; renderPanel(true); }
   if (t - (loop.st || 0) > 20000 && running) { loop.st = t; save(); }
 }
-function save() { try { localStorage.setItem(SAVE, sim.serialize(S)); } catch (e) { toast('자동 저장 실패(용량)'); } }
-window.addEventListener('beforeunload', () => { if (S) save(); });
+async function pack(txt) {
+  if (typeof CompressionStream === 'undefined') return txt;
+  const buf = await new Response(new Blob([txt]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
+  let b = ''; const u = new Uint8Array(buf); for (let i = 0; i < u.length; i += 8192) b += String.fromCharCode.apply(null, u.subarray(i, i + 8192)); return 'gz:' + btoa(b);
+}
+async function unpack(raw) {
+  if (!raw.startsWith('gz:')) return raw;
+  const bin = atob(raw.slice(3)); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+}
+let saving = false;
+async function save() { if (saving || !S) return; saving = true; try { const t = await pack(sim.serialize(S)); localStorage.setItem(SAVE, t); } catch (e) { toast('자동 저장 실패(용량)'); } saving = false; }
+
 
 // ---------- 입력 ----------
 function bindInput() {
@@ -145,7 +156,7 @@ function renderPanel(auto) {
   if (q('bNew')) q('bNew').onclick = () => { running = false; $('start').classList.remove('hide'); };
   if (q('bExp')) q('bExp').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([sim.serialize(S)], { type: 'application/json' })); a.download = 'genesis-atlas-save.json'; a.click(); };
   if (q('bImp')) q('bImp').onclick = () => q('fImp').click();
-  if (q('fImp')) q('fImp').onchange = async (e) => { try { localStorage.setItem(SAVE, await e.target.files[0].text()); $('cont').click(); } catch (x) { toast('불러오기 실패'); } };
+  if (q('fImp')) q('fImp').onchange = async (e) => { try { localStorage.setItem(SAVE, await pack(await e.target.files[0].text())); $('cont').click(); } catch (x) { toast('불러오기 실패'); } };
   const sp = q('spark'); if (sp) { const c = sp.getContext('2d'), hs = S.hist; c.strokeStyle = '#6db3ff'; c.beginPath(); const mx = Math.max(1, ...hs.map((x) => x.pop)); hs.forEach((x, i) => { const v = x.pop; const X = i / Math.max(1, hs.length - 1) * 300, Y = 58 - v / mx * 54; i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.stroke(); }
 }
 { const q = new URLSearchParams(location.search); if (q.has('map')) $('selMap').value = q.get('map'); if (q.has('mode')) $('selMode').value = q.get('mode'); if (q.has('auto')) { $('go').click(); window.__skip = +q.get('auto') || 0; if (q.has('speed')) window.__speed = +q.get('speed'); } }

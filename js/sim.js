@@ -294,7 +294,7 @@ function stepNations(S, map) {
       const o = prv[p]; const d = Math.hypot(o.x - cap.x, o.y - cap.y) / 160;
       let u = P.unrest[p] + (P.cult[p] !== n.cult ? 0.010 : -0.008) + d * 0.0012 + (n.stab < 0.4 ? 0.012 : -0.004) + (P.plague[p] ? 0.01 : 0);
       P.unrest[p] = u = clamp(u, 0, 1);
-      if (u > 0.985 && n.pc > 1 && p !== n.cap && P.pop[p] > 30) revolt(S, map, p, n);
+      if (u > 0.992 && n.pc > 1 && p !== n.cap && P.pop[p] > 30) revolt(S, map, p, n);
     }
     const capN = 6 + n.tech * 5 + (n.lead.exp > 1.2 ? 3 : 0);
     if (n.pc < capN && n.stab > 0.3 && rng.next() < 0.11 * (0.5 + n.lead.exp)) expand(S, map, n);
@@ -523,7 +523,9 @@ export function autoGod(S, map) {
 const TYPED = { pop: Float32Array, tech: Float32Array, owner: Int16Array, cult: Int16Array, rel: Int16Array, unrest: Float32Array, city: Uint8Array, fx: Float32Array, plague: Uint8Array };
 export function serialize(S) {
   const P = {}; for (const k of Object.keys(TYPED)) P[k] = Array.from(S.P[k], (v) => (Number.isInteger(v) ? v : Math.round(v * 1000) / 1000));
-  return JSON.stringify({ ...S, P, rng: S.rng.s, fr: null, fxQueue: null });
+  const nations = S.nations.map((n) => { if (!n.alive) return { ...n, relat: {}, allies: [], lead: { ...n.lead } }; const r = {}; for (const k in n.relat) if (S.nations[k] && S.nations[k].alive) r[k] = Math.round(n.relat[k]); return { ...n, relat: r }; });
+  const truce = {}; for (const k in S.truce) if (S.truce[k] > S.year) truce[k] = S.truce[k];
+  return JSON.stringify({ ...S, P, nations, truce, rng: S.rng.s, fr: null, fxQueue: null });
 }
 export function restore(json) {
   const S = typeof json === 'string' ? JSON.parse(json) : json;
