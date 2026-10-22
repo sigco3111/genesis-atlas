@@ -136,7 +136,7 @@ export class Renderer {
         out.push({ t: n.name, x: n.lx, y: n.ly, s: Math.sqrt(n.pc), n: n.id, big: n.pc });
       }
     }
-    return out;
+    out.sort((a, b) => b.big - a.big); return out;
   }
   paintOverlay() {
     const map = this.map; const d = this.ovImg.data; const u32 = new Uint32Array(d.buffer);
@@ -213,7 +213,7 @@ export class Renderer {
     }
     // 국가 라벨
     const fs = (l) => Math.max(0, Math.min(34, (6 + Math.sqrt(l.big) * 3.6) * Math.min(1.6, z * 0.9)));
-    const sorted = [...this.labels].sort((a, b) => b.big - a.big); const placed = [];
+    const sorted = this.labels; const placed = [];
     for (const l of sorted) {
       const size = fs(l); if (size < 9) continue; const [x, y] = this.w2s(l.x, l.y); if (x < -80 || y < -40 || x > this.cssW + 80 || y > this.cssH + 40) continue;
       ctx.font = `700 ${size}px "Noto Sans KR", system-ui, sans-serif`; const w = ctx.measureText(l.t).width; const box = [x - w / 2, y - size / 2, x + w / 2, y + size / 2];
