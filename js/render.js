@@ -320,7 +320,12 @@ export class Renderer {
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(8,12,20,0.85)'; ctx.fillStyle = '#ffe9a8';
           const lab = (p.place ? p.place + ' ' : '') + p.ylab;
-          ctx.strokeText(lab, x, y + r * 1.55 + fs * 0.9); ctx.fillText(lab, x, y + r * 1.55 + fs * 0.9);
+          const tw = ctx.measureText(lab).width, m = 4;
+          const lx = Math.max(m + tw / 2, Math.min(this.cssW - m - tw / 2, x));
+          let ly = y + r * 1.55 + fs * 0.9;
+          if (ly + fs / 2 + m > this.cssH) ly = y - r * 1.55 - fs * 0.9; // 아래가 잘리면 마커 위로
+          ly = Math.max(m + fs / 2, Math.min(this.cssH - m - fs / 2, ly));
+          ctx.strokeText(lab, lx, ly); ctx.fillText(lab, lx, ly);
         }
       }
       ctx.globalAlpha = 1;

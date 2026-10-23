@@ -172,10 +172,10 @@ const ok = (cond, msg) => { if (!cond) { fails++; console.error('FAIL', msg); } 
 {
   const pts = [{ x: 10, y: 20 }, { x: 70, y: 60 }];
   const f = fitWarView(pts, 800, 600, 0.5);
-  ok(f && f.x === 40 && f.y === 40, '카메라 맞춤: 점들의 중심');
+  ok(f && f.x === 40 && Math.abs(f.y - 40) < 2, '카메라 맞춤: 점들의 중심(라벨 여유만큼 미세 조정)');
   ok(f.z >= 0.5 && f.z <= 6, '카메라 맞춤: 줌은 제한 범위 안');
   const f1 = fitWarView([{ x: 5, y: 7 }], 800, 600, 0.5);
-  ok(f1 && f1.x === 5 && f1.y === 7 && f1.z <= 6, '카메라 맞춤: 점 하나도 동작');
+  ok(f1 && f1.x === 5 && Math.abs(f1.y - 7) < 2 && f1.z <= 6, '카메라 맞춤: 점 하나도 동작');
   const fw = fitWarView([{ x: 0, y: 0 }, { x: 5000, y: 4000 }], 300, 200, 2);
   ok(fw && fw.z === 2, '카메라 맞춤: 넓은 전역은 최소 줌 아래로 못 내려감');
   ok(fitWarView([], 800, 600, 0.5) === null, '카메라 맞춤: 점 없으면 null');
@@ -204,7 +204,7 @@ const ok = (cond, msg) => { if (!cond) { fails++; console.error('FAIL', msg); } 
     ok(sy >= ins.top && sy <= 844 - ins.bottom && sx >= 0 && sx <= 390, '인셋 맞춤: 모든 점이 가려지지 않는 보이는 영역 안');
   }
   const f2 = fitWarView(pts, 390, 844, 0.5);
-  ok(f2 && f2.x === 200 && f2.y === 180, '인셋 없으면 중심 그대로');
+  ok(f2 && f2.x === 200 && Math.abs(f2.y - 186) < 1, '인셋 없으면 가로 중심 그대로·아래 라벨 여유만큼만 이동');
   const f3 = fitWarView([{ x: 50, y: 50 }, { x: 90, y: 90 }], 800, 600, 0.5, { left: 300 });
   ok(f3 && f3.x < 70, '인셋 맞춤: 왼쪽이 가려지면 카메라가 왼쪽을 봐 점들이 오른쪽으로');
 }

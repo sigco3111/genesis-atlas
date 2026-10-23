@@ -94,9 +94,9 @@ export function fitWarView(pts, cssW, cssH, minZ, insets) {
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   for (const p of pts) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
   const bw = Math.max(30, x1 - x0), bh = Math.max(30, y1 - y0);
-  const pad = 26;
-  const aw = Math.max(60, cssW - l - r - pad * 2), ah = Math.max(60, cssH - t - b - pad * 2);
+  const padX = 26, padT = 26, padB = 48; // 아래쪽은 마커 밑 연도 라벨 자리까지 남김
+  const aw = Math.max(60, cssW - l - r - padX * 2), ah = Math.max(60, cssH - t - b - padT - padB);
   const z = Math.max(minZ, Math.min(6, Math.min(aw / bw, ah / bh)));
-  // 보이는 영역의 화면 중심은 (cssW + l - r) / 2, (cssH + t - b) / 2 이므로 점들의 중심이 그곳에 오게 카메라를 옮김
-  return { x: (x0 + x1) / 2 - (l - r) / (2 * z), y: (y0 + y1) / 2 - (t - b) / (2 * z), z };
+  // 보이는 영역(인셋+라벨 여유 포함)의 화면 중심에 점들의 중심이 오도록 카메라를 옮김
+  return { x: (x0 + x1) / 2 - (l - r) / (2 * z), y: (y0 + y1) / 2 - ((t + padT) - (b + padB)) / (2 * z), z };
 }
