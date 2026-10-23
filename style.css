@@ -119,3 +119,5 @@ select,input{background:#12304d;border:1px solid #35597f;border-radius:8px;paddi
 .cmpgrow .g em{font-style:normal;font-weight:700}
 .cmpgrow .up{color:#8fe08f}.cmpgrow .down{color:#ff9a8a}
 canvas#cmpSpark{width:100%;height:96px;background:#0b2036;border-radius:6px}
+.cmpchips .chip.on{background:#3b7bc4;border-color:#8cc0ff;color:#fff}
+.cmprow b.up{color:#8fe08f}.cmprow b.down{color:#ff9a8a}

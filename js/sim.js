@@ -199,7 +199,7 @@ export function aggregate(S, map) {
 }
 function killNation(S, n, how) {
   n.alive = false; n.died = S.year; n.pc = 0;
-  if (n.hist && (!n.hist.length || n.hist[n.hist.length - 1][0] < S.year)) n.hist.push([S.year, 0, 0]);
+  if (n.hist && (!n.hist.length || n.hist[n.hist.length - 1][0] < S.year)) n.hist.push([S.year, 0, 0, 0]);
   addLog(S, `${n.name}이(가) ${how} 역사에서 사라졌습니다. (존속 ${Math.max(1, S.year - n.born)}년)`, n.peakPc >= 3 ? 3 : 2, n.cap, n.id);
   S.wars = S.wars.filter((w) => { w.A = w.A.filter((x) => x !== n.id); w.D = w.D.filter((x) => x !== n.id); return w.A.length && w.D.length; });
   for (const m of S.nations) m.allies = m.allies.filter((x) => x !== n.id);
@@ -217,7 +217,7 @@ export function sampleNationHist(S) {
     if (!n.hist) n.hist = [];
     const last = n.hist[n.hist.length - 1];
     if (last && last[0] === S.year) continue;
-    n.hist.push([S.year, Math.round(n.pop), n.pc]);
+    n.hist.push([S.year, Math.round(n.pop), n.pc, Math.round(n.stab * 1000) / 1000]);
     if (n.hist.length > 240) n.hist = n.hist.filter((_, i) => i % 2 === 0);
   }
 }
@@ -245,7 +245,7 @@ export function step(S, map) {
   stepProvinces(S, map);
   if (S.year % 2 === 0 || !S.fr) computeFronts(S, map);
   aggregate(S, map);
-  for (const n of S.nations) if (n.alive && n.hist && !n.hist.length) n.hist.push([S.year, Math.round(n.pop), n.pc]);
+  for (const n of S.nations) if (n.alive && n.hist && !n.hist.length) n.hist.push([S.year, Math.round(n.pop), n.pc, Math.round(n.stab * 1000) / 1000]);
   sampleTrack(S);
   stepNations(S, map);
   stepWars(S, map);
@@ -638,7 +638,7 @@ export function restore(json) {
   if (!S.P.km) S.P.km = new Array(S.P.pop.length).fill(1);
   for (const k of Object.keys(TYPED)) S.P[k] = TYPED[k].from(S.P[k]);
   const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1; S.recentCaps = S.recentCaps || [];
-  for (const n of S.nations) if (!n.hist || !n.hist.length) n.hist = [[S.year, Math.round(n.pop || 0), n.pc || 0]];
+  for (const n of S.nations) if (!n.hist || !n.hist.length) n.hist = [[S.year, Math.round(n.pop || 0), n.pc || 0, n.stab == null ? 0.5 : Math.round(n.stab * 1000) / 1000]];
   return S;
 }
 export { yearStr, numStr };

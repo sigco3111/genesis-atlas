@@ -2,6 +2,7 @@ import { generateMap, MAP_KINDS, buildEarth, W, H } from './world.js';
 import { Renderer } from './render.js';
 import * as sim from './sim.js';
 import { CAP_AGE_STEPS, nextCapAge, capAgeLabel, trackedWarIds, warEvents } from './warwatch.js';
+import { METRICS, seriesOf, chartMax, commonWindow, changeOf, changeDir, fmtChange } from './cmptrend.js';
 import { yearStr, numStr, ERA_NAMES } from './names.js';
 const $ = (id) => document.getElementById(id);
 const SAVE = 'genesis-atlas-save-v1';
@@ -277,6 +278,8 @@ const TABS = [['world', '세계'], ['sel', '선택'], ['cmp', '비교'], ['log',
 let panelSig = '';
 let logNat = null; // 연대기 탭 국가 필터 (null = 전체)
 let cmpA = -1, cmpB = -1; // 비교 탭의 두 나라 슬롯
+let cmpMetric = 'pop'; // 추이 차트 지표 (pop/pc/stab)
+try { const m = localStorage.getItem('genesis-atlas-cmpmetric'); if (METRICS.some(([k]) => k === m)) cmpMetric = m; } catch (e) {}
 function goTo(p) { if (p == null || p < 0 || !map.provinces[p]) return; R.sel = p; R.paintHL(); R.focus(p, 4); needRefresh = true; if (isMobileLayout()) setPanelOpen(false); }
 function kv(k, v) { return `<div class="kv"><span>${k}</span><b>${v}</b></div>`; }
 // ---------- 국가 비교 ----------
@@ -293,24 +296,25 @@ function cmpNatOptions(selId) {
   if (selId >= 0 && !list.some((n) => n.id === selId) && S.nations[selId]) o += `<option value="${selId}" selected>${S.nations[selId].name} (멸망)</option>`;
   return o;
 }
-function drawCmpChart(cv, A, B) {
+function drawCmpChart(cv, A, B, key) {
   const c = cv.getContext('2d'); const Wd = cv.width, Ht = cv.height;
   c.clearRect(0, 0, Wd, Ht);
-  const hA = A.hist || [], hB = B.hist || [];
-  const mx = Math.max(1, ...hA.map((x) => x[1]), ...hB.map((x) => x[1]));
-  const y0 = Math.min(hA.length ? hA[0][0] : S.year, hB.length ? hB[0][0] : S.year);
-  const y1 = Math.max(hA.length ? hA[hA.length - 1][0] : S.year, hB.length ? hB[hB.length - 1][0] : S.year, y0 + 1);
+  const sA = seriesOf(A.hist, key), sB = seriesOf(B.hist, key);
+  const mx = chartMax(key, sA, sB);
+  const y0 = Math.min(sA.length ? sA[0][0] : S.year, sB.length ? sB[0][0] : S.year);
+  const y1 = Math.max(sA.length ? sA[sA.length - 1][0] : S.year, sB.length ? sB[sB.length - 1][0] : S.year, y0 + 1);
   const X = (y) => (y - y0) / (y1 - y0) * (Wd - 8) + 4;
   const Y = (v) => Ht - 14 - v / mx * (Ht - 26);
+  if (key === 'stab') { c.strokeStyle = '#223c58'; c.setLineDash([3, 3]); c.beginPath(); c.moveTo(0, Y(0.5)); c.lineTo(Wd, Y(0.5)); c.stroke(); c.setLineDash([]); }
   c.strokeStyle = '#1d3652'; c.beginPath(); c.moveTo(0, Y(0)); c.lineTo(Wd, Y(0)); c.stroke();
-  for (const [h, rgb] of [[hA, A.rgb], [hB, B.rgb]]) {
+  for (const [h, rgb] of [[sA, A.rgb], [sB, B.rgb]]) {
     if (!h.length) continue;
     c.strokeStyle = 'rgb(' + rgb + ')'; c.lineWidth = 1.6; c.beginPath();
     h.forEach((x, i) => { const px = X(x[0]), py = Y(x[1]); i ? c.lineTo(px, py) : c.moveTo(px, py); });
     c.stroke();
   }
   c.fillStyle = '#8aa3bd'; c.font = '10px sans-serif';
-  c.fillText(numStr(mx), 4, 11);
+  c.fillText(key === 'stab' ? '100%' : numStr(mx), 4, 11);
   const ys = (y) => y <= 0 ? 'BC ' + (1 - Math.round(y)) : '' + Math.round(y);
   const t0 = ys(y0), t1 = ys(y1);
   c.fillText(t0, 4, Ht - 3);
@@ -374,13 +378,25 @@ function renderPanel(auto) {
       const age = (n) => Math.max(1, (n.alive ? S.year : n.died) - n.born);
       h += row('건국', `${yearStr(A.born)} <small>${age(A)}년째</small>`, `${yearStr(B.born)} <small>${age(B)}년째</small>`, null, null);
       h += row('지도자', `${A.lead.name} <small>${sim.traitText(A.lead)}</small>`, `${B.lead.name} <small>${sim.traitText(B.lead)}</small>`, null, null);
-      h += '<h3>인구 추이 비교</h3><canvas id="cmpSpark" width="300" height="96"></canvas>';
-      const gr = (n) => { const hs = (n.hist || []).filter((x) => x[1] > 0); if (hs.length < 2) return null; return Math.round((hs[hs.length - 1][1] / hs[0][1] - 1) * 100); };
-      const gt = (g) => g == null ? '<em>기록 시작</em>' : `<em class="${g >= 0 ? 'up' : 'down'}">${g >= 0 ? '+' : ''}${g}%</em>`;
-      const ha0 = (A.hist || [])[0], hb0 = (B.hist || [])[0];
-      const since = Math.min(ha0 ? ha0[0] : S.year, hb0 ? hb0[0] : S.year);
-      h += `<div class="cmpgrow"><div class="g"><i style="color:rgb(${A.rgb})">■</i> ${A.name} ${gt(gr(A))}</div><div class="g"><i style="color:rgb(${B.rgb})">■</i> ${B.name} ${gt(gr(B))}</div></div>`;
-      h += `<p class="fine">${yearStr(since)} 이후 인구 추이 · 두 나라 같은 눈금 · 10년 간격 기록</p>`;
+      h += '<h3>성장 추이 비교</h3>';
+      h += '<div class="cmpchips">' + METRICS.map(([k, label]) => `<button class="chip ${cmpMetric === k ? 'on' : ''}" data-cmpm="${k}">${label}</button>`).join('') + '</div>';
+      h += '<canvas id="cmpSpark" width="300" height="96"></canvas>';
+      h += '<h3>같은 기간의 증감</h3>';
+      let w0 = null, w1 = null, rows = 0;
+      for (const [k, label] of METRICS) {
+        const w = commonWindow(A.hist, B.hist, k);
+        if (!w) { h += `<div class="cmprow"><span>${label}</span><b>—</b><b>—</b></div>`; continue; }
+        const chA = changeOf(k, w.a0, w.a1), chB = changeOf(k, w.b0, w.b1);
+        const dA = changeDir(chA), dB = changeDir(chB);
+        const win = dA == null || dB == null || dA === dB ? null : dA > dB ? 'a' : 'b';
+        const cls = (d, w2) => (w2 ? 'win ' : '') + (d == null ? '' : d >= 0 ? 'up' : 'down');
+        h += `<div class="cmprow"><span>${label}</span><b class="${cls(dA, win === 'a')}">${fmtChange(chA)}</b><b class="${cls(dB, win === 'b')}">${fmtChange(chB)}</b></div>`;
+        if (w0 == null || w.y0 < w0) w0 = w.y0;
+        if (w1 == null || w.y1 > w1) w1 = w.y1;
+        rows++;
+      }
+      if (rows) h += `<p class="fine">${yearStr(w0)}~${yearStr(w1)} · 지표마다 두 나라 모두 기록이 있는 구간만 비교 · 10년 간격 기록</p>`;
+      else h += '<p class="fine">아직 비교할 기록이 없습니다. 시간이 지나면 10년 간격으로 추이가 쌓입니다.</p>';
       h += `<div class="cmpchips"><button class="chip" data-cmpgo="${A.cap}">${A.name} 위치로</button><button class="chip" data-cmpgo="${B.cap}">${B.name} 위치로</button></div>`;
     }
   } else if (tab === 'log') {
@@ -419,6 +435,7 @@ function renderPanel(auto) {
   const q = (id) => body.querySelector('#' + id);
   for (const b of body.querySelectorAll('[data-cmp]')) b.onclick = () => addToCompare(+b.dataset.cmp);
   for (const b of body.querySelectorAll('[data-cmpgo]')) b.onclick = () => goTo(+b.dataset.cmpgo);
+  for (const b of body.querySelectorAll('[data-cmpm]')) b.onclick = () => { cmpMetric = b.dataset.cmpm; try { localStorage.setItem('genesis-atlas-cmpmetric', cmpMetric); } catch (e) {} panelSig = ''; renderPanel(); };
   const csa = q('cmpSelA'), csb = q('cmpSelB');
   if (csa) csa.onchange = () => { cmpA = +csa.value; panelSig = ''; renderPanel(); };
   if (csb) csb.onchange = () => { cmpB = +csb.value; panelSig = ''; renderPanel(); };
@@ -432,7 +449,7 @@ function renderPanel(auto) {
   if (q('bImp')) q('bImp').onclick = () => q('fImp').click();
   if (q('fImp')) q('fImp').onchange = async (e) => { try { localStorage.setItem(SAVE, await pack(await e.target.files[0].text())); $('cont').click(); } catch (x) { toast('불러오기 실패'); } };
   const sp = q('spark'); if (sp) { const c = sp.getContext('2d'), hs = S.hist; c.strokeStyle = '#6db3ff'; c.beginPath(); const mx = Math.max(1, ...hs.map((x) => x.pop)); hs.forEach((x, i) => { const v = x.pop; const X = i / Math.max(1, hs.length - 1) * 300, Y = 58 - v / mx * 54; i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.stroke(); }
-  const cs = q('cmpSpark'); if (cs && S.nations[cmpA] && S.nations[cmpB] && cmpA !== cmpB) drawCmpChart(cs, S.nations[cmpA], S.nations[cmpB]);
+  const cs = q('cmpSpark'); if (cs && S.nations[cmpA] && S.nations[cmpB] && cmpA !== cmpB) drawCmpChart(cs, S.nations[cmpA], S.nations[cmpB], cmpMetric);
 }
 // ---------- 국가 추적 카드 ----------
 let trackSig = '';

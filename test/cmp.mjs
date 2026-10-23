@@ -12,14 +12,15 @@ ok(withHist.length >= alive.filter((n) => S.year - n.born >= 20).length, 'nation
 ok(alive.every((n) => n.hist && n.hist.length >= 1), 'every alive nation has its founding point');
 const h0 = alive[0].hist;
 ok(h0.every((p, i) => i === 0 || h0[i - 1][0] < p[0]), 'hist years strictly increasing');
-ok(h0.every((p) => p.length === 3 && Number.isFinite(p[1]) && Number.isFinite(p[2])), 'hist points are [year, pop, pc]');
+ok(h0.every((p) => p.length === 4 && Number.isFinite(p[1]) && Number.isFinite(p[2])), 'hist points are [year, pop, pc, stab]');
+ok(h0.every((p) => p[3] >= 0 && p[3] <= 1), 'stab history stays within 0..1');
 // 마지막 점이 현재와 어긋나지 않는가 (10년 간격 샘플링)
 const top = alive.sort((a, b) => b.pop - a.pop)[0];
 const last = top.hist[top.hist.length - 1];
 ok(S.year - last[0] < 20, 'latest hist point is recent: gap ' + (S.year - last[0]));
 // 멸망 국가는 추이가 0으로 마감되는가
 const dead = S.nations.filter((n) => !n.alive);
-if (dead.length) ok(dead.every((n) => { const l = n.hist[n.hist.length - 1]; return l[1] === 0 && l[0] === n.died; }), 'dead nations end with [died, 0, 0]');
+if (dead.length) ok(dead.every((n) => { const l = n.hist[n.hist.length - 1]; return l[1] === 0 && l[0] === n.died; }), 'dead nations end with [died, 0, 0, 0]');
 // 장기 실행에서 포인트 수 상한(240) 유지
 ok(S.nations.every((n) => n.hist.length <= 240), 'hist capped at 240 points');
 // 저장/복원 후 hist 유지
@@ -32,5 +33,6 @@ legacy.nations[0].hist = [];
 const R2 = sim.restore(JSON.stringify(legacy));
 ok(R2.nations.every((n) => Array.isArray(n.hist) && n.hist.length >= 1), 'legacy save without hist gets seeded');
 ok(R2.nations[0].hist[0][1] === Math.round(R2.nations[0].pop), 'seeded point holds current pop');
+ok(R2.nations[0].hist[0].length === 4 && Number.isFinite(R2.nations[0].hist[0][3]), 'seeded point holds stab too');
 console.log(fail ? 'FAILED ' + fail : 'ALL OK  alive:' + alive.length + ' dead:' + dead.length + ' topHist:' + top.hist.length);
 process.exit(fail ? 1 : 0);
