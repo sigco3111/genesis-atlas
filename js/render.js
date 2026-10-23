@@ -475,20 +475,34 @@ export class Renderer {
     if (S.armies && S.armies.length && this.showArmies !== false) {
       // 모바일처럼 줌이 낮아도 읽히도록 최소 크기를 키우고, 같은 지점에 겹친 부대는 원형으로 벌린다
       const ss = Math.max(7.5, Math.min(12, 3.4 * Math.sqrt(z)));
-      // 부대 위치는 1년(한 틱)마다 갱신되므로, 프레임 사이를 부드럽게 보간해 행군이 눈에 보이게 한다
+      // 부대 위치는 1년(한 틱)마다 갱신된다. 틱 사이를 틱 경과율(tickPhase)로 보간해
+      // 무역선처럼 행군이 연속적으로 움직이는 모습으로 보이게 한다
       if (this.armySmS !== S) { this.armySm = new Map(); this.armySmS = S; }
+      const ph = this.tickPhase == null ? 1 : Math.min(1, Math.max(0, this.tickPhase));
       const smSeen = new Set();
       const groups = new Map();
       for (const a of S.armies) {
         smSeen.add(a.id);
         let sm = this.armySm.get(a.id);
-        if (!sm || Math.hypot(a.x - sm.x, a.y - sm.y) > 60) { sm = { x: a.x, y: a.y }; } // 새 부대이거나 순간이동(재배치)이면 바로 맞춘다
-        else { const k = Math.min(1, (this.lastDt || 1 / 60) * 3.5); sm.x += (a.x - sm.x) * k; sm.y += (a.y - sm.y) * k; }
+        if (!sm) { sm = { x: a.x, y: a.y, px: a.x, py: a.y, prog: a.prog || 0, pprog: a.prog || 0, path: a.path || null }; this.armySm.set(a.id, sm); }
+        if (a.x !== sm.x || a.y !== sm.y || (a.prog || 0) !== sm.prog || (a.path || null) !== sm.path) {
+          // 새 시뮬 틱이 반영됐다: 직전 틱 상태를 보관하고 이번 틱 상태로 갱신한다
+          sm.px = sm.x; sm.py = sm.y; sm.pprog = sm.prog;
+          sm.x = a.x; sm.y = a.y; sm.prog = a.prog || 0;
+          if ((a.path || null) !== sm.path) { sm.path = a.path || null; sm.pprog = 0; } // 경로 교체: 새 경로의 시작점이 이전 위치라 연속
+          else if (sm.prog < sm.pprog) sm.pprog = sm.prog; // 진행 리셋 보호
+          if (Math.hypot(sm.x - sm.px, sm.y - sm.py) > 260) { sm.px = sm.x; sm.py = sm.y; sm.pprog = sm.prog; } // 진짜 순간이동(두 틱 이상의 거리)만 바로 맞춘다
+        }
+        // 렌더 위치: 행군·후퇴 중이면 경로 위를 호장 비율로, 아니면 직선으로 틱 사이를 보간한다
+        let rx, ry;
+        if ((a.st === 'march' || a.st === 'retreat') && a.path && a.path === sm.path && a.dlen > 0 && sm.prog > sm.pprog) {
+          const pp = pathPos(a.path, (sm.pprog + (sm.prog - sm.pprog) * ph) / a.dlen); rx = pp[0]; ry = pp[1];
+        } else { rx = sm.px + (sm.x - sm.px) * ph; ry = sm.py + (sm.y - sm.py) * ph; }
+        sm.rx = rx; sm.ry = ry;
         // 병력이 줄면 사상자 숫자가 위로 떠오른다 (전투·포위·소모를 눈으로 읽게)
         if (sm.men != null && a.men < sm.men - 40 && (a.st === 'battle' || a.st === 'siege')) { (this.fl = this.fl || []).push({ wx: a.x, wy: a.y, txt: '-' + Math.round(sm.men - a.men), t: 0, dx: ((this.flN = (this.flN || 0) + 1) % 5 - 2) * 0.9, big: sm.men - a.men > a.men0 * 0.08 }); if (this.fl.length > 40) this.fl.shift(); }
         sm.men = a.men;
-        this.armySm.set(a.id, sm);
-        const k = Math.round(sm.x / 1.2) + ':' + Math.round(sm.y / 1.2); if (!groups.has(k)) groups.set(k, []); groups.get(k).push([a, sm]);
+        const k = Math.round(rx / 1.2) + ':' + Math.round(ry / 1.2); if (!groups.has(k)) groups.set(k, []); groups.get(k).push([a, sm]);
       }
       if (this.armySm.size > smSeen.size + 40) { for (const id of this.armySm.keys()) if (!smSeen.has(id)) this.armySm.delete(id); }
       // 행군 경로: 남은 길을 국가 색 점선으로 보여 줘 어디로 치고 가는지 읽히게 한다
@@ -497,7 +511,7 @@ export class Renderer {
           if (a.st !== 'march' && a.st !== 'retreat') continue; if (!a.path || a.path.length < 2 || a.prog >= a.dlen) continue;
           const nn = S.nations[a.nat]; if (!nn) continue; const sm = this.armySm.get(a.id) || a;
           ctx.save(); ctx.strokeStyle = `rgba(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]},.75)`; ctx.lineWidth = Math.max(1.4, ss * 0.16); ctx.setLineDash([ss * 0.55, ss * 0.45]); ctx.lineDashOffset = -this.time * ss * 2; ctx.lineCap = 'round';
-          ctx.beginPath(); const [sx, sy] = this.w2s(sm.x, sm.y); ctx.moveTo(sx, sy);
+          ctx.beginPath(); const [sx, sy] = this.w2s(sm.rx != null ? sm.rx : sm.x, sm.ry != null ? sm.ry : sm.y); ctx.moveTo(sx, sy);
           let acc = 0, started = false;
           for (let i = 1; i < a.path.length; i++) {
             const l = Math.hypot(a.path[i][0] - a.path[i - 1][0], a.path[i][1] - a.path[i - 1][1]); acc += l;
@@ -517,7 +531,7 @@ export class Renderer {
           const [a, sm] = arr[gi]; const nn = S.nations[a.nat]; if (!nn) continue;
           let ox = 0, oy = 0;
           if (arr.length > 1) { const ang = (gi / arr.length) * Math.PI * 2 - Math.PI / 2; const rr = ss * 1.1; ox = Math.cos(ang) * rr; oy = Math.sin(ang) * rr; }
-          const [bx, by] = this.w2s(sm.x, sm.y);
+          const [bx, by] = this.w2s(sm.rx != null ? sm.rx : sm.x, sm.ry != null ? sm.ry : sm.y);
           const px = bx + ox, py = by + oy;
           if (px < -30 || py < -30 || px > this.cssW + 30 || py > this.cssH + 30) continue;
           items.push({ a, nn, px, py });
