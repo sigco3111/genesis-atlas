@@ -471,6 +471,7 @@ export class Renderer {
       }
     }
     // 자율 부대: 깃발 칩 + 병력 수. 고속 진행에서는 숨긴다 (main.js가 showArmies로 제어)
+    this._ap = [];
     if (S.armies && S.armies.length && this.showArmies !== false) {
       // 모바일처럼 줌이 낮아도 읽히도록 최소 크기를 키우고, 같은 지점에 겹친 부대는 원형으로 벌린다
       const ss = Math.max(7.5, Math.min(12, 3.4 * Math.sqrt(z)));
@@ -552,12 +553,13 @@ export class Renderer {
       for (const it of items) {
         const { a, nn, px, py } = it;
         const col = `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})`;
+        (this._ap || (this._ap = [])).push(px, py);
         drawArmy(ctx, px, py, ss, col, this.time + a.id * 0.9, a.st, Math.min(9, Math.max(0, Math.floor(nn.tech || 0))), a);
         if (z >= 1.1) {
           const fs = Math.max(9.5, ss);
           ctx.font = '700 ' + fs + 'px system-ui,sans-serif'; ctx.textAlign = 'center';
           ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(5,15,28,.9)';
-          const tx = (a.cmd && z >= 2.6 ? a.cmd.n + ' ' : '') + (a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : String(Math.round(a.men)));
+          const tx = (a.cmd && z >= (this.cssW > 700 ? 2.6 : 3.4) ? a.cmd.n + ' ' : '') + (a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : String(Math.round(a.men)));
           ctx.strokeText(tx, px, py + ss * 2.0 + fs * 0.35); ctx.fillStyle = '#fff'; ctx.fillText(tx, px, py + ss * 2.0 + fs * 0.35);
         }
       }
@@ -571,7 +573,9 @@ export class Renderer {
         const size = fs(l); if (size < 9) continue;
         const [x, y] = this.w2s(l.x, l.y); if (x < -80 || y < -40 || x > this.cssW + 80 || y > this.cssH + 40) continue;
         ctx.font = `700 ${size}px "Noto Sans KR", system-ui, sans-serif`;
-        cands.push({ t: l.t, x, y, size, w: ctx.measureText(l.t).width, big: l.big, force: l.n === trkId });
+        const w0 = ctx.measureText(l.t).width, ap = this._ap || [];
+        if (l.n !== trkId) { let hit = false; for (let i = 0; i < ap.length; i += 2) { if (Math.abs(ap[i] - x) < w0 / 2 + 26 && Math.abs(ap[i + 1] - y) < size / 2 + 26) { hit = true; break; } } if (hit) continue; } // 부대 칩 주변 국가 라벨은 숨겨 전투 가독성 확보
+        cands.push({ t: l.t, x, y, size, w: w0, big: l.big, force: l.n === trkId });
       }
       for (const q of planLabels(cands, nationBudget(rel))) {
         ctx.font = `700 ${q.size}px "Noto Sans KR", system-ui, sans-serif`;
