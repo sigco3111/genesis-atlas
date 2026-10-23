@@ -6,6 +6,7 @@ import { capsBySide, warMapPoints, fitWarView } from './warhist.js';
 import { METRICS, seriesOf, chartMax, commonWindow, changeOf, changeDir, fmtChange } from './cmptrend.js';
 import { GOODS, NG, resOf, goodCss } from './econ.js';
 import { yearStr, numStr, ERA_NAMES } from './names.js';
+import { unitOf, CMD_TRAITS } from './units.js';
 const $ = (id) => document.getElementById(id);
 const SAVE = 'genesis-atlas-save-v1';
 const CAPAGE_PREF = 'genesis-atlas-capage', WARPAUSE_PREF = 'genesis-atlas-warpause';
@@ -581,6 +582,16 @@ function renderPanel(auto) {
       const aN = As[0] ? As[0].name : '?', dN = Ds[0] ? Ds[0].name : '?';
       h += '<div class="warcard"><div class="whead">⚔ <b>' + aN + '</b>' + (As.length > 1 ? ` 외 ${As.length - 1}개국` : '') + ' 대 <b>' + dN + '</b>' + (Ds.length > 1 ? ` 외 ${Ds.length - 1}개국` : '') + '</div>';
       h += `<div class="wmeta">${yearStr(w.start)} 시작 · ${S.year - w.start}년째 · 점령 ${ca + cd ? `${aN}측 ${ca} · ${dN}측 ${cd} 지방` : '아직 없음'}</div>`;
+      const ST = { march: '행군', siege: '포위', battle: '교전', retreat: '후퇴', garrison: '주둔' };
+      const wa = (S.armies || []).filter((a) => a.war === w.id).sort((p, q) => q.men - p.men).slice(0, 6);
+      if (wa.length) {
+        h += '<div class="armlist">';
+        for (const a of wa) {
+          const an = S.nations[a.nat]; if (!an) continue; const mo = a.mor == null ? 1 : a.mor;
+          h += `<button class="chip armrow" data-army="${a.id}" style="display:block;width:100%;text-align:left;margin:2px 0"><span style="color:rgb(${an.rgb[0]},${an.rgb[1]},${an.rgb[2]})">■</span> ${an.name} ${unitOf(an).key} <b>${a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : Math.round(a.men)}</b> · ${ST[a.st] || a.st} · 사기 ${Math.round(mo * 100)}%${a.cmd ? ` · ${CMD_TRAITS[a.cmd.t].key} ${a.cmd.n}` : ''}${(a.xp || 0) >= 0.3 ? ' ★' : ''}</button>`;
+        }
+        h += '</div>';
+      }
       h += `<div class="wbtns"><button class="chip" data-warfront="${w.id}">전선으로 이동</button></div></div>`;
     }
     h += '<h3>끝난 전쟁 결과</h3>';
@@ -620,7 +631,7 @@ function renderPanel(auto) {
     h = '<h3>도움말</h3><p class="fine">드래그로 이동, 휠/핀치로 확대. 지역을 누르면 정보가 나옵니다. 전쟁이 나면 나라가 스스로 부대를 편성해 행군하고 싸웁니다. 위쪽 버튼으로 속도와 지도 모드를 바꾸고, 권능 탭에서 신의 힘을 쓰거나 자동 신 위임을 켜 보세요. 아무것도 하지 않아도 세계는 계속 흘러갑니다.</p><h3>설정</h3><button class="pw" id="bSave">지금 저장</button><button class="pw" id="bExp">파일로 내보내기</button><button class="pw" id="bImp">파일에서 불러오기</button><button class="pw" id="bNew">새 세계 시작</button><input type="file" id="fImp" class="hide" accept=".json">';
     h += '<p class="fine">지도 데이터: Natural Earth (퍼블릭 도메인). 지구 국경은 근사이며 대체 역사입니다.</p>';
   }
-  const sig = tab === 'god' ? 'god' + selPower + S.auto : tab + h.length + (tab === 'world' || tab === 'eco' || tab === 'sel' || tab === 'log' || tab === 'cmp' || tab === 'war' ? Math.floor(S.year / 5) : '');
+  const sig = tab === 'god' ? 'god' + selPower + S.auto : tab + h.length + (tab === 'world' || tab === 'eco' || tab === 'sel' || tab === 'log' || tab === 'cmp' ? Math.floor(S.year / 5) : tab === 'war' ? S.year : '');
   if (auto && sig === panelSig) return;
   panelSig = sig; body.innerHTML = h;
   for (const a of body.querySelectorAll('[data-n]')) a.onclick = (e) => { e.preventDefault(); const n = S.nations[+a.dataset.n]; R.sel = n.cap; R.paintHL(); R.focus(n.cap, 3); tab = 'sel'; renderPanel(); };
@@ -633,6 +644,7 @@ function renderPanel(auto) {
   const q = (id) => body.querySelector('#' + id);
   for (const b of body.querySelectorAll('[data-cmp]')) b.onclick = () => addToCompare(+b.dataset.cmp);
   for (const b of body.querySelectorAll('[data-cmpgo]')) b.onclick = () => goTo(+b.dataset.cmpgo);
+  for (const b of body.querySelectorAll('[data-army]')) b.onclick = () => { const a = (S.armies || []).find((x) => x.id === +b.dataset.army); if (a) { R.focusWorld(a.x, a.y, 6); needRefresh = true; toast('부대 위치로 이동합니다'); } };
   for (const b of body.querySelectorAll('[data-warfront]')) b.onclick = () => { const w = S.wars.find((x) => x.id === +b.dataset.warfront); if (focusWar(w)) toast('⚔ 전선으로 이동합니다'); };
   for (const b of body.querySelectorAll('[data-warmap]')) b.onclick = () => { const id = +b.dataset.warmap; if (histWar && histWar.id === id) hideWarView(); else showWarOnMap(id); panelSig = ''; renderPanel(); };
   for (const b of body.querySelectorAll('[data-cmpm]')) b.onclick = () => { cmpMetric = b.dataset.cmpm; try { localStorage.setItem('genesis-atlas-cmpmetric', cmpMetric); } catch (e) {} panelSig = ''; renderPanel(); };
