@@ -145,3 +145,16 @@ canvas#cmpSpark{width:100%;height:96px;background:#0b2036;border-radius:6px}
 #pwarm .armtxt{color:#ffe3a3;font-weight:600;white-space:nowrap}
 #pwarm button{flex:none;white-space:nowrap;padding:3px 12px;font-size:12px;font-weight:600;background:#27333f;border:1px solid #4d7fb3;border-radius:8px;color:#eaf4ff;cursor:pointer}
 #pwarm button:hover{background:#3b7bc4}
+/* v35 관찰 화면 정리: 카드 접기·펼치기 */
+.foldbtn{padding:2px 8px;font-size:11px;border-radius:6px;background:#12304d;border:1px solid #35597f;color:#cfe3ff;white-space:nowrap;flex:none;cursor:pointer}
+.foldbtn:hover{background:#27507a;color:#fff}
+#track .thead .foldbtn{margin-left:4px}
+#pwhint.folded{width:auto;max-width:94vw}
+#pwhint .foldbtn{vertical-align:baseline}
+#pwhint.folded .acts{display:inline-flex;gap:6px;margin:0 0 0 6px}
+#pwhint.folded .acts button{padding:4px 10px;font-size:12px}
+#pwres .prhead{display:flex;align-items:center;gap:8px;justify-content:space-between}
+#pwres .prbtns{display:flex;gap:4px;flex:none;margin-left:8px}
+#pwres.folded{display:flex;align-items:center;gap:6px;width:auto;max-width:94vw;padding:6px 12px}
+#pwres.folded .prhead{margin-bottom:0;font-size:12px}
+@media(max-width:760px){#pwres .prhead{font-size:12px}#pwres .prbtns .foldbtn{padding:2px 6px}}

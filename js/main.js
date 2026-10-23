@@ -199,6 +199,12 @@ function bindInput() {
   window.addEventListener('keydown', (e) => { if (e.key === ' ') { speed = speed ? 0 : prevSpeed; markBars(); e.preventDefault(); } if (e.key === 'Escape' && selPower) { disarmPower(); toast('권능 선택을 해제했습니다'); } });
 }
 let selPower = null, pwCount = 0;
+// v35 관찰 화면 정리: 미리보기·결과 카드 접기 상태 (접혀도 발동·취소·해제는 유지)
+let pwHintFold = false, resFold = false;
+try { pwHintFold = localStorage.getItem('genesis-atlas-pwfold') === '1'; } catch (e) {}
+try { resFold = localStorage.getItem('genesis-atlas-resfold') === '1'; } catch (e) {}
+function setPwHintFold(v) { pwHintFold = v; try { localStorage.setItem('genesis-atlas-pwfold', v ? '1' : '0'); } catch (e) {} }
+function setResFold(v) { resFold = v; try { localStorage.setItem('genesis-atlas-resfold', v ? '1' : '0'); } catch (e) {} }
 // ---------- 권능 미리보기 / 결과 요약 ----------
 const PW_GOOD = new Set(['bless', 'tribe', 'prophet', 'hero', 'peace']);
 const PW_ICON = { bless: '🌧', drought: '🏜', plague: '☠', quake: '💥', volcano: '🌋', meteor: '☄', tribe: '🛖', prophet: '📿', hero: '⭐', revolt: '🔥', peace: '🕊', war: '⚔' };
@@ -245,10 +251,22 @@ function updatePowerPreview(p) {
   R.setPowerPreview({ center: p, provs: a.provs, color: powerColor(selPower, a.ok) });
   const nm = S.provName[p] || '이름 없는 땅';
   const scope = a.nation != null ? S.nations[a.nation].name + ' 전체 (' + a.provs.length + '지방)' : a.provs.length > 1 ? '중심+인접 ' + a.provs.length + '곳' : '1개 지방';
-  let h = `<b>${PW_ICON[selPower] || ''} ${sim.POWERS[selPower].name}</b> → ${nm}`;
-  h += a.ok ? `<div class="okln">${scope} · ${a.expect}</div>` : `<div class="badln">${a.msg}</div>`;
-  if (pwPending && pwPending.p === p && pwPending.type === selPower) h += '<div class="acts"><button id="pwGo">여기에 발동</button><button id="pwNo">취소</button></div>';
+  const pend = pwPending && pwPending.p === p && pwPending.type === selPower;
+  const label = `<b>${PW_ICON[selPower] || ''} ${sim.POWERS[selPower].name}</b> → ${nm}`;
+  let h;
+  if (pwHintFold) {
+    // 접힌 상태: 한 줄만 보여 지도를 가리지 않되, 확정 단계라면 발동·취소는 그대로 둠
+    h = label + ` <button id="phFold" class="foldbtn" title="미리보기 펼치기">펼치기 ▾</button>`;
+    if (pend) h += '<span class="acts"><button id="pwGo">여기에 발동</button><button id="pwNo">취소</button></span>';
+    hint.classList.add('folded');
+  } else {
+    h = label + ` <button id="phFold" class="foldbtn" title="한 줄로 접어 지도가 잘 보이게 하기">접기 ▴</button>`;
+    h += a.ok ? `<div class="okln">${scope} · ${a.expect}</div>` : `<div class="badln">${a.msg}</div>`;
+    if (pend) h += '<div class="acts"><button id="pwGo">여기에 발동</button><button id="pwNo">취소</button></div>';
+    hint.classList.remove('folded');
+  }
   hint.innerHTML = h; hint.classList.remove('hide');
+  const fo = hint.querySelector('#phFold'); if (fo) fo.onclick = (e) => { e.stopPropagation(); setPwHintFold(!pwHintFold); updatePowerPreview(p); };
   const go = hint.querySelector('#pwGo'); if (go) go.onclick = () => firePower(selPower, p);
   const no = hint.querySelector('#pwNo'); if (no) no.onclick = () => { pwPending = null; R.setPowerPreview(null); hint.classList.add('hide'); };
 }
@@ -265,7 +283,8 @@ const dnum = (v) => (v < 0 ? '-' : '') + numStr(Math.abs(v));
 function showPowerResult(type, p, d) {
   const el = pwEl('pwres'); if (!d) { el.classList.add('hide'); return; }
   const nm = S.provName[p] || '';
-  let h = `<div class="prhead">${PW_ICON[type] || ''} ${sim.POWERS[type].name} 결과${nm ? ' — ' + nm : ''}</div>`;
+  const headTxt = `${PW_ICON[type] || ''} ${sim.POWERS[type].name} 결과${nm ? ' — ' + nm : ''}`;
+  let h = `<div class="prhead">${headTxt}</div>`;
   const lines = [];
   const ctr = d.provs.find((x) => x.p === p);
   if (ctr && ctr.pop1 !== ctr.pop0) { const dp = ctr.pop1 - ctr.pop0; lines.push(`인구 ${numStr(ctr.pop0)} → ${numStr(ctr.pop1)} <em class="${dp > 0 ? 'up' : 'down'}">(${dp > 0 ? '+' : ''}${dnum(dp)})</em>`); }
@@ -282,10 +301,23 @@ function showPowerResult(type, p, d) {
   }
   for (const e of d.events.slice(0, type === 'peace' || type === 'war' ? 3 : 1)) lines.push(`<em>${e}</em>`);
   if (!lines.length) lines.push('눈에 띄는 즉각 변화는 없습니다');
-  el.innerHTML = h + lines.slice(0, 6).map((l) => `<div class="prline">${l}</div>`).join('');
+  const btns = `<button id="prFold" class="foldbtn">${resFold ? '펼치기 ▾' : '접기 ▴'}</button><button id="prX" class="foldbtn" title="닫기">✕</button>`;
+  if (resFold) {
+    el.classList.add('folded');
+    el.innerHTML = `<span class="prhead">${headTxt}</span><span class="prbtns">${btns}</span>`;
+  } else {
+    el.classList.remove('folded');
+    el.innerHTML = `<div class="prhead"><span>${headTxt}</span><span class="prbtns">${btns}</span></div>` + lines.slice(0, 6).map((l) => `<div class="prline">${l}</div>`).join('');
+  }
   el.classList.remove('hide');
   clearTimeout(showPowerResult.t); showPowerResult.t = setTimeout(() => el.classList.add('hide'), 8000);
-  el.onclick = () => el.classList.add('hide');
+  el.onclick = (e) => {
+    if (e.target.closest('button')) return;
+    if (resFold) { setResFold(false); showPowerResult(type, p, d); }
+    else el.classList.add('hide');
+  };
+  el.querySelector('#prFold').onclick = (e) => { e.stopPropagation(); setResFold(!resFold); showPowerResult(type, p, d); };
+  el.querySelector('#prX').onclick = (e) => { e.stopPropagation(); clearTimeout(showPowerResult.t); el.classList.add('hide'); };
 }
 function select(p) {
   if (p < 0) { R.sel = -1; R.paintHL(); return; }
@@ -539,12 +571,15 @@ function renderTrack() {
   const news = sim.nationLog(S, n.id, 3);
   const sig = [n.alive, Math.round(n.pop), n.pc, Math.round(n.stab * 100), wars.length, news.length ? news[0].y + news[0].t : '', T.gained, T.lost, T.dead, autoWarPause].join('|');
   if (sig === trackSig) return; trackSig = sig;
-  let h = `<div class="thead"><i style="color:rgb(${n.rgb})">■</i><b>${n.name}</b><span>${n.gov}</span></div>`;
+  let h = `<div class="thead"><i style="color:rgb(${n.rgb})">■</i><b>${n.name}</b><span>${n.gov}</span><button id="tFold" class="foldbtn" title="한 줄로 접어 지도가 잘 보이게 하기">접기 ▾</button></div>`;
   if (trackFold) {
-    h = `<div class="thead"><i style="color:rgb(${n.rgb})">■</i><b>${n.name}</b><span>${n.alive ? numStr(n.pop) : '멸망'} ▾</span></div>`;
+    h = `<div class="thead"><i style="color:rgb(${n.rgb})">■</i><b>${n.name}</b><span>${n.alive ? numStr(n.pop) : '멸망'}</span><button id="tFold" class="foldbtn" title="추적 카드 펼치기">펼치기 ▴</button></div>`;
     el.classList.add('folded');
     el.innerHTML = h;
-    el.querySelector('.thead').onclick = () => { trackFold = false; try { localStorage.setItem('genesis-atlas-trackfold', '0'); } catch (e) {} trackSig = ''; renderTrack(); };
+    const unfold = () => { trackFold = false; try { localStorage.setItem('genesis-atlas-trackfold', '0'); } catch (e) {} trackSig = ''; renderTrack(); };
+    el.querySelector('.thead').onclick = unfold;
+    el.querySelector('.thead').title = '눌러서 펼치기';
+    el.querySelector('#tFold').onclick = (e) => { e.stopPropagation(); unfold(); };
     return;
   }
   el.classList.remove('folded');
@@ -564,8 +599,10 @@ function renderTrack() {
   h += '<div class="tbtns"><button id="tFocus">지도에서 보기</button><button id="tLog">연대기</button><button id="tOff">추적 해제</button></div>';
   if (n.alive) h += `<button id="tWarPause" class="twp${autoWarPause ? ' on' : ''}" title="켜 두면 이 국가가 전쟁을 시작하거나 전쟁이 끝날 때 자동으로 일시정지합니다">⚔ 전쟁 시작·종료 시 자동 정지: ${autoWarPause ? '켜짐' : '꺼짐'}</button>`;
   el.innerHTML = h;
-  el.querySelector('.thead').onclick = () => { trackFold = true; try { localStorage.setItem('genesis-atlas-trackfold', '1'); } catch (e) {} trackSig = ''; renderTrack(); };
+  const fold = () => { trackFold = true; try { localStorage.setItem('genesis-atlas-trackfold', '1'); } catch (e) {} trackSig = ''; renderTrack(); };
+  el.querySelector('.thead').onclick = fold;
   el.querySelector('.thead').title = '눌러서 접기';
+  el.querySelector('#tFold').onclick = (e) => { e.stopPropagation(); fold(); };
   for (const d of el.querySelectorAll('[data-war]')) d.onclick = () => { const w = S.wars.find((x) => x.id === +d.dataset.war); if (w) focusWar(w); };
   $('tFocus').onclick = () => goTo(n.cap);
   for (const d of el.querySelectorAll('[data-tp]')) d.onclick = () => goTo(+d.dataset.tp);
