@@ -140,13 +140,16 @@ function loop(t) { if (!loop.n) console.log('loop1'); loop.n = (loop.n || 0) + 1
     if (n) needRefresh = true;
     if (S.auto && n) for (let i = 0; i < Math.min(n, 3); i++) sim.autoGod(S, map);
   }
+  for (const f of S.fxQueue.splice(0)) if (speed < 20) R.addEffect(f[0], f[1], f[1] === 'war' ? '#ff5050' : f[1] === 'plague' ? '#9be26a' : '#ffd27a');
+  if (S.log.length) { const lg = S.log; let i = lg.length - 1; while (i >= 0 && lg[i] !== loop.lastLog) i--; const fresh = i < 0 ? lg.slice(-1) : lg.slice(i + 1); loop.lastLog = lg[lg.length - 1];
+    if (speed <= 100 && t - (loop.tt || 0) > 2500) { const big = fresh.filter((l) => l.i >= 3).pop(); if (big) { loop.tt = t; toast(yearStr(big.y) + ' · ' + big.t); } } }
   if (S && S.track) {
     const cur = trackedWarIds(S);
     if (autoWarPause && speed > 0) {
       const ev = warEvents(prevTrkWars, cur);
       if (ev.started.length || ev.ended.length) {
         const tn = S.nations[S.track.id];
-        speed = 0; markBars();
+        speed = 0; markBars(); loop.tt = t; // 자동 정지 알림이 큰 사건 알림에 바로 덮이지 않게 함
         const nm = tn ? tn.name : '추적 국가';
         const what = tn && !tn.alive ? '멸망' : ev.started.length ? '전쟁 발발' : '전쟁 종료';
         toast('★ ' + nm + ' ' + what + ' — 자동으로 멈췄습니다 (스페이스바로 재개)');
@@ -155,9 +158,6 @@ function loop(t) { if (!loop.n) console.log('loop1'); loop.n = (loop.n || 0) + 1
     }
     prevTrkWars = cur;
   } else prevTrkWars = [];
-  for (const f of S.fxQueue.splice(0)) if (speed < 20) R.addEffect(f[0], f[1], f[1] === 'war' ? '#ff5050' : f[1] === 'plague' ? '#9be26a' : '#ffd27a');
-  if (S.log.length) { const lg = S.log; let i = lg.length - 1; while (i >= 0 && lg[i] !== loop.lastLog) i--; const fresh = i < 0 ? lg.slice(-1) : lg.slice(i + 1); loop.lastLog = lg[lg.length - 1];
-    if (speed <= 100 && t - (loop.tt || 0) > 2500) { const big = fresh.filter((l) => l.i >= 3).pop(); if (big) { loop.tt = t; toast(yearStr(big.y) + ' · ' + big.t); } } }
   if (needRefresh && t - lastRefresh > 100) { R.refresh(S); lastRefresh = t; needRefresh = false; }
   { const c = R.cam; const key = c.x + '|' + c.y + '|' + c.z + '|' + R.sel + '|' + R.mode + '|' + R.cssW + R.cssH + '|' + lastRefresh; if (speed > 0 || R.effects.length || R.pvOn || key !== loop.dk || R.fresh) { R.draw(dt, S); loop.dk = key; R.fresh = false; } }
   $('year').textContent = yearStr(S.year); $('era').textContent = ERA_NAMES[Math.min(9, Math.floor(S.stats.maxT))];
