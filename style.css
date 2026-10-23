@@ -149,12 +149,17 @@ canvas#cmpSpark{width:100%;height:96px;background:#0b2036;border-radius:6px}
 .foldbtn{padding:2px 8px;font-size:11px;border-radius:6px;background:#12304d;border:1px solid #35597f;color:#cfe3ff;white-space:nowrap;flex:none;cursor:pointer}
 .foldbtn:hover{background:#27507a;color:#fff}
 #track .thead .foldbtn{margin-left:4px}
-#pwhint.folded{width:auto;max-width:94vw}
+#pwhint.folded:not(.hide){display:flex;align-items:center;gap:6px;width:auto;max-width:94vw;white-space:nowrap}
+#pwhint.folded .phlabel{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #pwhint .foldbtn{vertical-align:baseline}
-#pwhint.folded .acts{display:inline-flex;gap:6px;margin:0 0 0 6px}
+#pwhint.folded .foldbtn{flex:none}
+#pwhint.folded .acts{display:inline-flex;gap:6px;margin:0;flex:none}
 #pwhint.folded .acts button{padding:4px 10px;font-size:12px}
 #pwres .prhead{display:flex;align-items:center;gap:8px;justify-content:space-between}
 #pwres .prbtns{display:flex;gap:4px;flex:none;margin-left:8px}
 #pwres.folded:not(.hide){display:flex;align-items:center;gap:6px;width:auto;max-width:94vw;padding:6px 12px}
-#pwres.folded .prhead{margin-bottom:0;font-size:12px}
+#pwres.folded .prhead{margin-bottom:0;font-size:12px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+#pwres.folded .prbtns{margin-left:0}
+#track.folded .thead b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:104px}
+#track.folded .thead span{white-space:nowrap}
 @media(max-width:760px){#pwres .prhead{font-size:12px}#pwres .prbtns .foldbtn{padding:2px 6px}}

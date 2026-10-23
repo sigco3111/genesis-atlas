@@ -164,7 +164,7 @@ function loop(t) { if (!loop.n) console.log('loop1'); loop.n = (loop.n || 0) + 1
   { const c = R.cam; const key = c.x + '|' + c.y + '|' + c.z + '|' + R.sel + '|' + R.mode + '|' + R.cssW + R.cssH + '|' + lastRefresh; if (speed > 0 || R.effects.length || R.pvOn || key !== loop.dk || R.fresh) { R.draw(dt, S); loop.dk = key; R.fresh = false; } }
   $('year').textContent = yearStr(S.year); $('era').textContent = ERA_NAMES[Math.min(9, Math.floor(S.stats.maxT))];
   $('spop').textContent = '인구 ' + numStr(S.stats.world); $('snat').textContent = '국가 ' + S.stats.alive; $('swar').textContent = '전쟁 ' + S.wars.length;
-  if (t - (loop.pt || 0) > 800) { loop.pt = t; renderPanel(true); renderTrack(); }
+  if (t - (loop.pt || 0) > 800) { loop.pt = t; renderPanel(true); renderTrack(); layoutFloaters(); }
   if (t - (loop.st || 0) > 20000 && running) { loop.st = t; save(); }
 }
 async function pack(txt) {
@@ -185,7 +185,7 @@ async function save() { if (saving || !S) return; saving = true; try { const t =
 function bindInput() {
   const cv = $('map'); const pts = new Map(); let moved = 0, pd = 0;
   cv.addEventListener('pointerdown', (e) => { lastPtr = e.pointerType || 'mouse'; cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); moved = 0; pd = pts.size === 2 ? dist() : 0; });
-  cv.addEventListener('pointerleave', () => { if (selPower && !pwPending) { R.setPowerPreview(null); pwEl('pwhint').classList.add('hide'); } });
+  cv.addEventListener('pointerleave', () => { if (selPower && !pwPending) { R.setPowerPreview(null); hideFloater(pwEl('pwhint')); } });
   cv.addEventListener('pointermove', (e) => {
     if (!pts.has(e.pointerId)) { R.hover = R.provAt(e.clientX, e.clientY); if (selPower) updatePowerPreview(R.hover); return; }
     const o = pts.get(e.pointerId); const dx = e.clientX - o[0], dy = e.clientY - o[1]; pts.set(e.pointerId, [e.clientX, e.clientY]); moved += Math.abs(dx) + Math.abs(dy);
@@ -219,11 +219,26 @@ function pwEl(id) {
   }
   const mob = isMobileLayout();
   const useTop = mob && id !== 'pwarm'; // 사용 중 칩은 모바일에서도 아래에 둬 추적 카드·미리보기와 겹치지 않게 함
-  const off = id !== 'pwarm' && selPower ? 52 : 0; // 권능 사용 중 칩과 겹치지 않게 미리보기·결과 카드를 안쪽으로 내림
+  const off = !mob && id !== 'pwarm' && selPower ? 52 : 0; // 데스크톱: 권능 사용 중 칩과 겹치지 않게 미리보기·결과 카드를 안쪽으로 내림 (모바일은 layoutFloaters가 정리)
   el.style[useTop ? 'top' : 'bottom'] = ((useTop ? 44 : id === 'pwarm' && mob ? 120 : 84) + off) + 'px';
   el.style[useTop ? 'bottom' : 'top'] = 'auto';
   return el;
 }
+// 모바일 동시 표시 정리: 미리보기→결과→추적 카드 순으로 위에서부터 쌓아 서로 덮지 않게 한다.
+function layoutFloaters() {
+  if (!isMobileLayout() || !document.body) return;
+  let top = 44;
+  for (const id of ['pwhint', 'pwres']) {
+    const el = $(id);
+    if (el && !el.classList.contains('hide')) {
+      el.style.top = top + 'px'; el.style.bottom = 'auto';
+      top += el.offsetHeight + 8;
+    }
+  }
+  const tr = $('track');
+  if (tr && !tr.classList.contains('hide')) tr.style.top = Math.max(106, top + 8) + 'px';
+}
+function hideFloater(el) { el.classList.add('hide'); layoutFloaters(); }
 function touchUI() { return (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || lastPtr === 'touch'; }
 function powerColor(type, ok) { return !ok ? '#9aa7b5' : PW_GOOD.has(type) ? '#7fe08a' : '#ff6a55'; }
 // 권능 연속 사용: 한 번 고른 권능은 해제할 때까지 유지되고, 사용 중 칩이 상태와 해제 길을 보여 준다.
@@ -242,11 +257,11 @@ function armPower(type) {
 function disarmPower() {
   selPower = null; pwCount = 0; pwPending = null;
   if (R) R.setPowerPreview(null);
-  pwEl('pwhint').classList.add('hide'); updateArmChip();
+  hideFloater(pwEl('pwhint')); updateArmChip();
 }
 function updatePowerPreview(p) {
   const hint = pwEl('pwhint');
-  if (!selPower || p == null || p < 0) { R.setPowerPreview(null); hint.classList.add('hide'); return; }
+  if (!selPower || p == null || p < 0) { R.setPowerPreview(null); hideFloater(hint); return; }
   const a = sim.powerArea(S, map, selPower, p);
   R.setPowerPreview({ center: p, provs: a.provs, color: powerColor(selPower, a.ok) });
   const nm = S.provName[p] || '이름 없는 땅';
@@ -256,7 +271,7 @@ function updatePowerPreview(p) {
   let h;
   if (pwHintFold) {
     // 접힌 상태: 한 줄만 보여 지도를 가리지 않되, 확정 단계라면 발동·취소는 그대로 둠
-    h = label + ` <button id="phFold" class="foldbtn" title="미리보기 펼치기">펼치기 ▾</button>`;
+    h = `<span class="phlabel">${label}</span><button id="phFold" class="foldbtn" title="미리보기 펼치기">펼치기 ▾</button>`;
     if (pend) h += '<span class="acts"><button id="pwGo">여기에 발동</button><button id="pwNo">취소</button></span>';
     hint.classList.add('folded');
   } else {
@@ -265,15 +280,15 @@ function updatePowerPreview(p) {
     if (pend) h += '<div class="acts"><button id="pwGo">여기에 발동</button><button id="pwNo">취소</button></div>';
     hint.classList.remove('folded');
   }
-  hint.innerHTML = h; hint.classList.remove('hide');
+  hint.innerHTML = h; hint.classList.remove('hide'); layoutFloaters();
   const fo = hint.querySelector('#phFold'); if (fo) fo.onclick = (e) => { e.stopPropagation(); setPwHintFold(!pwHintFold); updatePowerPreview(p); };
   const go = hint.querySelector('#pwGo'); if (go) go.onclick = () => firePower(selPower, p);
-  const no = hint.querySelector('#pwNo'); if (no) no.onclick = () => { pwPending = null; R.setPowerPreview(null); hint.classList.add('hide'); };
+  const no = hint.querySelector('#pwNo'); if (no) no.onclick = () => { pwPending = null; R.setPowerPreview(null); hideFloater(hint); };
 }
 function firePower(type, p) {
   const r = sim.applyPower(S, map, type, p);
   if (!r.ok) { toast(r.msg); pwPending = null; updatePowerPreview(p); return; }
-  pwPending = null; R.setPowerPreview(null); pwEl('pwhint').classList.add('hide');
+  pwPending = null; R.setPowerPreview(null); hideFloater(pwEl('pwhint'));
   pwCount++; updateArmChip();
   toast((PW_ICON[type] || '') + ' ' + sim.POWERS[type].name + ' 발동 (' + pwCount + '회) — 다른 지역에도 계속 쓸 수 있습니다');
   showPowerResult(type, p, r.diff);
@@ -281,7 +296,7 @@ function firePower(type, p) {
 }
 const dnum = (v) => (v < 0 ? '-' : '') + numStr(Math.abs(v));
 function showPowerResult(type, p, d) {
-  const el = pwEl('pwres'); if (!d) { el.classList.add('hide'); return; }
+  const el = pwEl('pwres'); if (!d) { hideFloater(el); return; }
   const nm = S.provName[p] || '';
   const headTxt = `${PW_ICON[type] || ''} ${sim.POWERS[type].name} 결과${nm ? ' — ' + nm : ''}`;
   let h = `<div class="prhead">${headTxt}</div>`;
@@ -309,15 +324,15 @@ function showPowerResult(type, p, d) {
     el.classList.remove('folded');
     el.innerHTML = `<div class="prhead"><span>${headTxt}</span><span class="prbtns">${btns}</span></div>` + lines.slice(0, 6).map((l) => `<div class="prline">${l}</div>`).join('');
   }
-  el.classList.remove('hide');
-  clearTimeout(showPowerResult.t); showPowerResult.t = setTimeout(() => el.classList.add('hide'), 8000);
+  el.classList.remove('hide'); layoutFloaters();
+  clearTimeout(showPowerResult.t); showPowerResult.t = setTimeout(() => hideFloater(el), 8000);
   el.onclick = (e) => {
     if (e.target.closest('button')) return;
     if (resFold) { setResFold(false); showPowerResult(type, p, d); }
-    else el.classList.add('hide');
+    else hideFloater(el);
   };
   el.querySelector('#prFold').onclick = (e) => { e.stopPropagation(); setResFold(!resFold); showPowerResult(type, p, d); };
-  el.querySelector('#prX').onclick = (e) => { e.stopPropagation(); clearTimeout(showPowerResult.t); el.classList.add('hide'); };
+  el.querySelector('#prX').onclick = (e) => { e.stopPropagation(); clearTimeout(showPowerResult.t); hideFloater(el); };
 }
 function select(p) {
   if (p < 0) { R.sel = -1; R.paintHL(); return; }
@@ -562,9 +577,9 @@ function setTracking(id) {
 function renderTrack() {
   const el = $('track'); if (!S) return;
   const T = S.track;
-  if (!T) { el.classList.add('hide'); trackSig = ''; return; }
+  if (!T) { el.classList.add('hide'); trackSig = ''; layoutFloaters(); return; }
   const n = S.nations[T.id];
-  if (!n) { el.classList.add('hide'); return; }
+  if (!n) { el.classList.add('hide'); layoutFloaters(); return; }
   el.classList.remove('hide');
   if (T.dead && !T.mourned) { T.mourned = true; toast('추적 중이던 ' + n.name + '이(가) 역사에서 사라졌습니다'); }
   const wars = n.alive ? S.wars.filter((w) => w.A.includes(n.id) || w.D.includes(n.id)) : [];
@@ -580,6 +595,7 @@ function renderTrack() {
     el.querySelector('.thead').onclick = unfold;
     el.querySelector('.thead').title = '눌러서 펼치기';
     el.querySelector('#tFold').onclick = (e) => { e.stopPropagation(); unfold(); };
+    layoutFloaters();
     return;
   }
   el.classList.remove('folded');
@@ -622,5 +638,6 @@ function renderTrack() {
     const mx = Math.max(1, ...hs.map((x) => x[1]));
     hs.forEach((x, i) => { const X = i / Math.max(1, hs.length - 1) * 220, Y = 38 - x[1] / mx * 34; i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.stroke();
   }
+  layoutFloaters();
 }
 { const q = new URLSearchParams(location.search); if (q.has('map')) $('selMap').value = q.get('map'); if (q.has('mode')) $('selMode').value = q.get('mode'); if (q.has('auto')) { $('go').click(); window.__skip = +q.get('auto') || 0; if (q.has('speed')) window.__speed = +q.get('speed'); } }
