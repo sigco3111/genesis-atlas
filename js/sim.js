@@ -508,8 +508,9 @@ function stepDiplomacy(S, map) {
             const k = tkey(n.id, m); if (!S.seaPairs[k]) { S.seaPairs[k] = 1; if (n.pc + t.pc >= 5) addLog(S, `${n.name}와(과) ${t.name} 사이에 바닷길이 열렸습니다. 무역선이 오갑니다.`, 1, a, n.id, m); }
           } else { // 육로: 지상 마스크 위 경로를 찾아 붙인다. 예산 부족이면 다음 계산으로 미룬다
             const pa2 = map.provinces[a], pb2 = map.provinces[b];
-            const lp = pathComputes - pc0 < BUD ? findLandPath(map, pa2.ax, pa2.ay, pb2.ax, pb2.ay) : null;
-            S.routes.push(lp ? [a, b, 0, lp] : [a, b, 0]);
+            if (pathComputes - pc0 >= BUD) continue; // 예산 부족이면 다음 계산으로 미룬다
+            const lp = findLandPath(map, pa2.ax, pa2.ay, pb2.ax, pb2.ay);
+            if (lp) S.routes.push([a, b, 0, lp]); // 지상 경로가 검증될 때만 연다 (바다를 가로지르는 가짜 선 없음)
           }
         }
       }
@@ -752,7 +753,7 @@ export function upgradeSeas(S, map) {
       if (r[3] && r[3].length >= 2) return r;
       const a = map.provinces[r[0]], b = map.provinces[r[1]]; if (!a || !b) return r;
       const w = findLandPath(map, a.ax, a.ay, b.ax, b.ay);
-      return w ? [r[0], r[1], 0, w] : r;
+      return w ? [r[0], r[1], 0, w] : null; // 지상 경로를 못 찾으면 닫는다 (가짜 직선 방지)
     }
     if (r[3] && r[3].length >= 2) return r;
     const a = map.provinces[r[0]], b = map.provinces[r[1]]; if (!a || !b) return null;

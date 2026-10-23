@@ -45,7 +45,8 @@ let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log('FAIL', m); }
   ok(seaRoutes.every((r) => allWater2(map, r[3])), '해상 항로 전 구간 수역 (지구)');
   const allLand2 = (m, path) => { for (let i = 1; i < path.length; i++) { const n = Math.ceil(Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1])); for (let k = 0; k <= n; k++) { const f = n ? k / n : 0; const x = Math.round(path[i - 1][0] + (path[i][0] - path[i - 1][0]) * f), y = Math.round(path[i - 1][1] + (path[i][1] - path[i - 1][1]) * f); if (x < 0 || y < 0 || x >= m.W || y >= m.H || !m.land[y * m.W + x]) return false; } } return true; };
   const landWithPath = landRoutes.filter((r) => r[3]);
-  ok(landRoutes.every((r) => !r[3] || allLand2(map, r[3])), '육로 경유지 전 구간 육지 (지구)');
+  ok(landRoutes.every((r) => r[3] && r[3].length >= 2), '육로 모두 경유지 보유 (가짜 직선 육로 없음)');
+  ok(landRoutes.every((r) => allLand2(map, r[3])), '육로 경유지 전 구간 육지 (지구)');
   console.log('경유지 있는 육로', landWithPath.length, '대상', (S.carr || []).length);
   for (const cv of S.carr || []) ok(cv.t >= 0 && cv.t <= 1 && map.provinces[cv.a] && map.provinces[cv.b], '대상 상태 유효');
   ok((S.carr || []).every((cv) => landWithPath.some((r) => r[0] === cv.a && r[1] === cv.b)), '모든 대상은 경유지 있는 육로 위');

@@ -276,10 +276,7 @@ export class Renderer {
           for (let i = 0; i < r[3].length; i++) { const [sx, sy] = this.w2s(r[3][i][0], r[3][i][1]); if (i) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy); }
           ctx.stroke(); continue;
         }
-        const [x1, y1] = this.w2s(a.ax, a.ay), [x2, y2] = this.w2s(b.ax, b.ay);
-        if (Math.abs(x1 - x2) > this.cssW * 1.2) continue;
-        ctx.strokeStyle = 'rgba(255,225,140,0.55)';
-        ctx.beginPath(); ctx.moveTo(x1, y1); const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.hypot(x2 - x1, y2 - y1) * 0.12; ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke();
+        // 경유지 없는 육로는 그리지 않는다 (바다 위를 지나는 가짜 직선 방지)
       }
       ctx.setLineDash([]);
       // 무역선: 수역 항로를 따라 왕복하는 돛단배
