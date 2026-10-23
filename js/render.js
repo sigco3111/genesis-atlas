@@ -455,6 +455,21 @@ export class Renderer {
       ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.fillStyle = q.gold ? '#ffe9a8' : '#fff';
       ctx.strokeText(q.t, q.x, q.y); ctx.fillText(q.t, q.x, q.y);
     }
+    // 전장 흔적: 격전지에 그을린 땅과 꽂힌 칼이 오래 남아 서서히 사라진다
+    if (S.fields && S.fields.length && this.showArmies !== false && z >= 1.2) {
+      for (const f of S.fields) {
+        const age = S.year - f.y0; if (age < 0 || age > 35) continue;
+        const [fx, fy] = this.w2s(f.x, f.y); if (fx < -30 || fy < -30 || fx > this.cssW + 30 || fy > this.cssH + 30) continue;
+        const al = 1 - age / 35, rr = Math.max(7, Math.min(16, 3 * Math.sqrt(z))) * (0.8 + 0.2 * f.k);
+        ctx.save(); ctx.translate(fx, fy);
+        ctx.globalAlpha = 0.5 * al; ctx.fillStyle = '#1a1210'; ctx.beginPath(); ctx.ellipse(0, 0, rr * 1.25, rr * 0.8, 0, 0, 7); ctx.fill();
+        ctx.globalAlpha = 0.85 * al; ctx.strokeStyle = '#d9d2c4'; ctx.lineWidth = Math.max(1.2, rr * 0.13); ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(-rr * 0.55, -rr * 0.65); ctx.lineTo(rr * 0.55, rr * 0.45); ctx.moveTo(rr * 0.55, -rr * 0.65); ctx.lineTo(-rr * 0.55, rr * 0.45); ctx.stroke();
+        if (f.k >= 2) { ctx.fillStyle = '#d9d2c4'; ctx.beginPath(); ctx.arc(0, rr * 0.62, rr * 0.16, 0, 7); ctx.fill(); }
+        if (f.k >= 3) { ctx.fillStyle = '#c0392b'; ctx.fillRect(-rr * 0.05, -rr * 1.2, rr * 0.55, rr * 0.3); ctx.fillStyle = '#d9d2c4'; ctx.fillRect(-rr * 0.12, -rr * 1.2, rr * 0.07, rr * 0.9); }
+        ctx.restore();
+      }
+    }
     // 자율 부대: 깃발 칩 + 병력 수. 고속 진행에서는 숨긴다 (main.js가 showArmies로 제어)
     if (S.armies && S.armies.length && this.showArmies !== false) {
       // 모바일처럼 줌이 낮아도 읽히도록 최소 크기를 키우고, 같은 지점에 겹친 부대는 원형으로 벌린다

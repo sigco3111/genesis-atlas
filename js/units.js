@@ -140,6 +140,14 @@ export function battleTick(S, map, A, B) {
   const dB = Math.min(B.men, A.men * 0.26 * Math.sqrt(sA / Math.max(1, sB)) * rng.range(0.7, 1.3));
   const mA0 = A.men, mB0 = B.men;
   A.men -= dA; B.men -= dB; S.deaths.war += dA + dB;
+  // 전장 흔적: 큰 전투가 벌어진 자리는 수십 년간 지도에 남는다 (저장에 포함, 옛 저장엔 없으면 새로 만든다)
+  S.fields = S.fields || [];
+  if (dA + dB > 350) {
+    const mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
+    const near = S.fields.find((f) => Math.hypot(f.x - mx, f.y - my) < 14);
+    if (near) { near.y0 = S.year; near.k = Math.min(3, near.k + (dA + dB > 900 ? 1 : 0)); }
+    else { S.fields.push({ x: mx, y: my, y0: S.year, k: dA + dB > 900 ? 2 : 1 }); if (S.fields.length > 80) S.fields.shift(); }
+  }
   // 사기·경험: 손실이 큰 쪽은 사기가 꺾이고, 더 많이 쓰러뜨린 쪽은 경험과 사기를 얻는다
   for (const [U, loss, dealt, m0] of [[A, dA, dB, mA0], [B, dB, dA, mB0]]) {
     const lf = loss / Math.max(1, U.men0);
@@ -309,6 +317,7 @@ export function stepArmies(S, map) {
       a.st = backAtSiege ? 'siege' : 'march';
     }
   }
+  if (S.fields && S.fields.length && S.fields.some((f) => S.year - f.y0 > 35)) S.fields = S.fields.filter((f) => S.year - f.y0 <= 35);
   // 4) 소멸한 부대 정리
   S.armies = S.armies.filter((a) => a.men >= MIN_MEN);
 }
