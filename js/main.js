@@ -245,6 +245,8 @@ function select(p) {
 // ---------- 패널 ----------
 const TABS = [['world', '세계'], ['sel', '선택'], ['log', '연대기'], ['god', '권능'], ['set', '설정']];
 let panelSig = '';
+let logNat = null; // 연대기 탭 국가 필터 (null = 전체)
+function goTo(p) { if (p == null || p < 0 || !map.provinces[p]) return; R.sel = p; R.paintHL(); R.focus(p, 4); needRefresh = true; if (isMobileLayout()) setPanelOpen(false); }
 function kv(k, v) { return `<div class="kv"><span>${k}</span><b>${v}</b></div>`; }
 function renderPanel(auto) {
   if (!S) return;
@@ -262,9 +264,28 @@ function renderPanel(auto) {
       h += `<h3>${S.provName[p] || '무인 지대'}</h3>` + kv('인구', numStr(S.P.pop[p])) + kv('기술', S.P.tech[p].toFixed(2)) + kv('불안', Math.round(S.P.unrest[p] * 100) + '%') + kv('도시', S.cityName[p] || '-') + kv('문화', S.P.cult[p] >= 0 ? S.cultures[S.P.cult[p]].name : '-') + kv('신앙', S.P.rel[p] >= 0 ? S.religions[S.P.rel[p]].name : '-');
       if (n) h += `<h3>${n.name}</h3>` + kv('정체', n.gov) + kv('지도자', n.lead.name + ' (' + sim.traitText(n.lead) + ')') + kv('인구', numStr(n.pop)) + kv('지방', n.pc) + kv('안정도', Math.round(n.stab * 100) + '%') + kv('건국', yearStr(n.born)) + kv('전적', n.wins + '승 ' + n.losses + '패');
       if (n && n.alive) h += `<button class="pw" data-trk="${n.id}">${S.track && S.track.id === n.id ? '★ 추적 해제' : '☆ 이 국가 추적'}<small>인구·영토·전쟁 변화를 화면 왼쪽 위 카드로 계속 보여 줍니다.</small></button>`;
+      if (n) {
+        const nl = sim.nationLog(S, n.id, 6);
+        if (nl.length) h += `<h3>${n.name}의 연대기</h3><div class="log nlog">` + nl.map((l) => `<div class="i${l.i}${l.p >= 0 ? ' hasloc' : ''}"${l.p >= 0 ? ` data-lp="${l.p}" title="눌러서 위치로 이동"` : ''}>${yearStr(l.y)} · ${l.t}</div>`).join('') + `</div><button class="pw" data-nlog="${n.id}">연대기 전체 보기<small>이 국가의 건국·지도자·전쟁·권능 개입 기록을 모아 봅니다.</small></button>`;
+        else h += `<button class="pw" data-nlog="${n.id}">이 국가의 연대기<small>아직 기록된 사건이 없습니다.</small></button>`;
+      }
     }
   } else if (tab === 'log') {
-    h = '<div class="log">' + S.log.slice(-80).reverse().map((l) => `<div class="i${l.i}">${yearStr(l.y)} · ${l.t}</div>`).join('') + '</div>';
+    const chips = [`<button class="chip ${logNat == null ? 'on' : ''}" data-lf="-1">전체</button>`];
+    const chipIds = new Set();
+    if (S.track) chipIds.add(S.track.id);
+    if (logNat != null) chipIds.add(logNat);
+    if (R.sel >= 0 && S.P.owner[R.sel] >= 0) chipIds.add(S.P.owner[R.sel]);
+    for (const id of chipIds) { const cn = S.nations[id]; if (cn) chips.push(`<button class="chip ${logNat === id ? 'on' : ''}" data-lf="${id}"><i style="color:rgb(${cn.rgb})">■</i> ${cn.name}${cn.alive ? '' : ' (멸망)'}</button>`); }
+    h = '<div class="logflt">' + chips.join('') + '</div>';
+    let entries;
+    if (logNat != null && S.nations[logNat]) {
+      const nn = S.nations[logNat];
+      entries = sim.nationLog(S, logNat, 120);
+      if (!entries.some((l) => l.y <= nn.born && l.t.includes(nn.name))) entries.push({ y: nn.born, t: nn.name + '의 시작' + (S.mode === 'real' ? ' (시작 시나리오 배치)' : ' (건국)'), i: 3, p: nn.cap, n: logNat });
+      h += `<div class="logsum">${nn.name}의 사건 ${entries.length}개 · 최신순${S.log.length >= 880 ? ' · 오래된 기록은 서서히 덮어씌워집니다' : ''}</div>`;
+    } else { logNat = null; entries = S.log.slice(-80).reverse(); }
+    h += '<div class="log">' + entries.map((l) => `<div class="i${l.i}${l.p >= 0 ? ' hasloc' : ''}"${l.p >= 0 ? ` data-lp="${l.p}" title="눌러서 위치로 이동"` : ''}>${yearStr(l.y)} · ${l.t}</div>`).join('') + '</div>';
   } else if (tab === 'god') {
     h = '<h3>신의 권능</h3><p>권능을 고르면 지도에 영향 범위와 예상 효과가 미리 보입니다. 지역을 눌러 발동하면 실제 변화를 요약해 보여 줍니다.</p>' + Object.entries(sim.POWERS).map(([k, v]) => `<button class="pw ${selPower === k ? 'on' : ''}" data-p="${k}">${v.name}<small>${v.desc}</small></button>`).join('');
     h += `<button class="pw ${S.auto ? 'on' : ''}" id="autoBtn">자동 신 위임: ${S.auto ? '켜짐' : '꺼짐'}<small>신이 알아서 균형을 맞춥니다.</small></button>`;
@@ -278,6 +299,9 @@ function renderPanel(auto) {
   for (const a of body.querySelectorAll('[data-n]')) a.onclick = (e) => { e.preventDefault(); const n = S.nations[+a.dataset.n]; R.sel = n.cap; R.paintHL(); R.focus(n.cap, 3); tab = 'sel'; renderPanel(); };
   for (const a of body.querySelectorAll('[data-w]')) a.onclick = (e) => { e.preventDefault(); setTracking(+a.dataset.w); };
   for (const b of body.querySelectorAll('[data-trk]')) b.onclick = () => setTracking(+b.dataset.trk);
+  for (const d of body.querySelectorAll('[data-lp]')) d.onclick = () => goTo(+d.dataset.lp);
+  for (const d of body.querySelectorAll('[data-lf]')) d.onclick = () => { const v = +d.dataset.lf; logNat = v >= 0 ? v : null; panelSig = ''; renderPanel(); };
+  for (const b of body.querySelectorAll('[data-nlog]')) b.onclick = () => { logNat = +b.dataset.nlog; tab = 'log'; panelSig = ''; renderPanel(); };
   for (const b of body.querySelectorAll('[data-p]')) b.onclick = () => { selPower = selPower === b.dataset.p ? null : b.dataset.p; pwPending = null; if (!selPower) { R.setPowerPreview(null); pwEl('pwhint').classList.add('hide'); } toast(selPower ? '지도에 영향 범위가 보입니다. 대상 지역을 누르세요' : '취소'); panelSig = ''; renderPanel(); };
   const q = (id) => body.querySelector('#' + id);
   if (q('autoBtn')) q('autoBtn').onclick = () => { S.auto = !S.auto; panelSig = ''; renderPanel(); };
@@ -307,7 +331,7 @@ function renderTrack() {
   el.classList.remove('hide');
   if (T.dead && !T.mourned) { T.mourned = true; toast('추적 중이던 ' + n.name + '이(가) 역사에서 사라졌습니다'); }
   const wars = n.alive ? S.wars.filter((w) => w.A.includes(n.id) || w.D.includes(n.id)) : [];
-  const news = []; for (let i = S.log.length - 1; i >= 0 && news.length < 3; i--) if (S.log[i].n === n.id) news.push(S.log[i]);
+  const news = sim.nationLog(S, n.id, 3);
   const sig = [n.alive, Math.round(n.pop), n.pc, Math.round(n.stab * 100), wars.length, news.length ? news[0].y + news[0].t : '', T.gained, T.lost, T.dead].join('|');
   if (sig === trackSig) return; trackSig = sig;
   let h = `<div class="thead"><i style="color:rgb(${n.rgb})">■</i><b>${n.name}</b><span>${n.gov}</span></div>`;
@@ -331,13 +355,15 @@ function renderTrack() {
   }
   h += '<canvas id="tspark" width="222" height="40"></canvas>';
   h += `<div class="tfine">${yearStr(T.since)}부터 추적 중</div>`;
-  if (news.length) h += '<div class="tnews">' + news.map((l) => `<div>${yearStr(l.y)} · ${l.t}</div>`).join('') + '</div>';
-  h += '<div class="tbtns"><button id="tFocus">지도에서 보기</button><button id="tOff">추적 해제</button></div>';
+  if (news.length) h += '<div class="tnews">' + news.map((l) => `<div${l.p >= 0 ? ` class="hasloc" data-tp="${l.p}" title="눌러서 위치로 이동"` : ''}>${yearStr(l.y)} · ${l.t}</div>`).join('') + '</div>';
+  h += '<div class="tbtns"><button id="tFocus">지도에서 보기</button><button id="tLog">연대기</button><button id="tOff">추적 해제</button></div>';
   el.innerHTML = h;
   el.querySelector('.thead').onclick = () => { trackFold = true; try { localStorage.setItem('genesis-atlas-trackfold', '1'); } catch (e) {} trackSig = ''; renderTrack(); };
   el.querySelector('.thead').title = '눌러서 접기';
   for (const d of el.querySelectorAll('[data-war]')) d.onclick = () => { const w = S.wars.find((x) => x.id === +d.dataset.war); if (w) focusWar(w); };
-  $('tFocus').onclick = () => { if (n.cap >= 0 && map.provinces[n.cap]) { R.focus(n.cap, 4); R.sel = n.cap; R.paintHL(); needRefresh = true; } };
+  $('tFocus').onclick = () => goTo(n.cap);
+  for (const d of el.querySelectorAll('[data-tp]')) d.onclick = () => goTo(+d.dataset.tp);
+  $('tLog').onclick = () => { logNat = n.id; tab = 'log'; setPanelOpen(true); panelSig = ''; renderPanel(); };
   $('tOff').onclick = () => setTracking(null);
   const c = $('tspark').getContext('2d'); const hs = T.hist;
   if (hs.length) {

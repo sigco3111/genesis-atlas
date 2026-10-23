@@ -17,6 +17,16 @@ button:hover{background:#27507a}button.on{background:#3b7bc4;border-color:#8cc0f
 #tabBody h3{margin:12px 0 4px;font-size:15px;color:#ffd27a}
 .kv{display:flex;justify-content:space-between;border-bottom:1px solid #1d3652;padding:2px 0}
 .log div{padding:3px 0;border-bottom:1px solid #162c44}.log .i3{color:#ffd27a;font-weight:600}.log .i2{color:#cfe3ff}.log .i1{color:#8aa3bd}
+.log div.hasloc{cursor:pointer;padding-left:4px;padding-right:4px}
+.log div.hasloc:hover{background:#142c46;border-radius:4px}
+.log div.hasloc::after{content:' 📍';font-size:10px;opacity:.75}
+.logflt{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px}
+.logflt .chip{background:#0e2033;border:1px solid #2a4a6a;color:#cfe3ff;border-radius:12px;padding:3px 9px;font-size:12px}
+.logflt .chip:hover{background:#1a3550}
+.logflt .chip.on{background:#3b7bc4;border-color:#8cc0ff;color:#fff}
+.logflt .chip i{margin-right:3px}
+.logsum{font-size:11px;color:#8aa3bd;margin:0 0 4px}
+.nlog{margin-bottom:6px;max-height:220px;overflow:auto}
 .pw{display:block;width:100%;text-align:left;margin:4px 0}.pw small{display:block;color:#9bb3cc}
 canvas.spark{width:100%;height:60px;background:#0b2036;border-radius:6px}
 #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#000b;padding:8px 14px;border-radius:20px;opacity:0;transition:.3s;pointer-events:none}
@@ -41,7 +51,7 @@ select,input{background:#12304d;border:1px solid #35597f;border-radius:8px;paddi
 @media(min-width:761px){#panelHandle{left:-40px;top:50%;transform:translateY(-50%);width:40px;height:120px;border-radius:10px 0 0 10px;border-right:0;box-shadow:-4px 0 12px #000a;writing-mode:vertical-rl}}
 @media(max-width:760px){#panelHandle{top:-32px;left:50%;transform:translateX(-50%);min-width:150px;height:32px;border-radius:10px 10px 0 0;border-bottom:0;box-shadow:0 -4px 12px #000a}}
 #tabBody a{color:#9fd0ff}#tabBody a:visited{color:#c6b3ff}
-@media(max-width:760px){#toast{bottom:64px;top:auto;z-index:7;background:#000e;width:88%;text-align:center;border-radius:14px}
+@media(max-width:760px){#toast{bottom:64px;top:auto;z-index:7;background:#000e;width:88%;text-align:center;border-radius:14px}}
 #track{position:fixed;left:10px;top:50px;width:240px;background:#0a1a2bee;border:1px solid #3a5f86;border-radius:12px;padding:10px 12px;z-index:5;box-shadow:0 4px 16px #0008;font-size:13px}
 #track .thead{display:flex;gap:6px;align-items:baseline;font-size:14px;margin-bottom:4px}
 #track .thead b{color:#fff}
@@ -55,6 +65,9 @@ select,input{background:#12304d;border:1px solid #35597f;border-radius:8px;paddi
 #track .tfine{font-size:11px;color:#7f97b0;margin-top:2px}
 #track .tnews{margin-top:6px;border-top:1px solid #1d3652;padding-top:4px;font-size:12px;color:#8aa3bd;max-height:84px;overflow:auto}
 #track .tnews div{padding:1px 0}
+#track .tnews div.hasloc{cursor:pointer}
+#track .tnews div.hasloc:hover{color:#e8eef5}
+#track .tnews div.hasloc::after{content:' 📍';font-size:9px;opacity:.75}
 #track .tbtns{display:flex;gap:6px;margin-top:8px}
 #track .tbtns button{flex:1;padding:5px 4px;font-size:12px}
 #track canvas{width:100%;height:40px;background:#0b2036;border-radius:6px;margin-top:6px}
@@ -62,8 +75,7 @@ select,input{background:#12304d;border:1px solid #35597f;border-radius:8px;paddi
 #track.folded{width:auto;padding:6px 10px}
 #track.folded .thead{margin:0;font-size:13px}
 #track.folded .thead span{font-size:12px}
-@media(max-width:760px){#track{top:106px;left:8px;width:212px;font-size:12px}
-#track.folded{top:106px;width:auto}}
+@media(max-width:760px){#track{top:106px;left:8px;width:212px;font-size:12px}#track.folded{top:106px;width:auto}}
 #track .twar{cursor:pointer}
 #track .twar:hover{text-decoration:underline}
 #swar{cursor:pointer}

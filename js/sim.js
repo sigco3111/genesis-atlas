@@ -57,10 +57,18 @@ export function josa(t) {
     return c + JOSA[j][fin ? 0 : 1];
   });
 }
-export function addLog(S, txt, imp = 1, p = -1, n = -1) {
+export function addLog(S, txt, imp = 1, p = -1, n = -1, n2 = -1) {
   txt = josa(txt);
-  S.log.push({ y: S.year, t: txt, i: imp, p, n });
+  const e = { y: S.year, t: txt, i: imp, p, n };
+  if (n2 >= 0) e.n2 = n2;
+  S.log.push(e);
   if (S.log.length > 900) S.log.splice(0, 150);
+}
+// 한 국가와 관련된 연대기 사건만 모읍니다 (최신순). n: 주체, n2: 상대국.
+export function nationLog(S, id, limit = 40) {
+  const out = [];
+  for (let i = S.log.length - 1; i >= 0 && out.length < limit; i--) { const l = S.log[i]; if (l.n === id || l.n2 === id) out.push(l); }
+  return out;
 }
 export function newNation(S, map, p, name, cult, tech = 0) {
   const rng = S.rng; const id = S.nations.length;
@@ -341,7 +349,7 @@ export function revolt(S, map, p, n) {
   const P = S.P; const cu = P.cult[p];
   const m = newNation(S, map, p, null, cu, P.tech[p]); P.owner[p] = m.id; m.gov = '독립 세력'; m.stab = 0.5; P.unrest[p] = 0.1;
   for (const q of map.provinces[p].land) if (P.owner[q] === n.id && P.cult[q] === cu && P.unrest[q] > 0.55) { P.owner[q] = m.id; P.unrest[q] = 0.15; }
-  addLog(S, `${S.provName[p] || '한 지방'}이(가) ${n.name}에 맞서 봉기해 ${m.name}으로 독립했습니다.`, 2, p, m.id);
+  addLog(S, `${S.provName[p] || '한 지방'}이(가) ${n.name}에 맞서 봉기해 ${m.name}으로 독립했습니다.`, 2, p, m.id, n.id);
   n.stab = Math.max(0.05, n.stab - 0.08); m.relat[n.id] = -60; n.relat[m.id] = -60;
 }
 function collapse(S, map, n) {
@@ -381,7 +389,7 @@ export function startWar(S, map, a, d, reason) {
   S.wars.push(w);
   a.relat[d.id] = Math.min(-40, a.relat[d.id] || 0); d.relat[a.id] = Math.min(-60, d.relat[a.id] || 0);
   const al = (ids) => ids.length > 1 ? `(+동맹 ${ids.length - 1}개국)` : '';
-  addLog(S, `${a.name}${al(w.A)}이(가) ${d.name}${al(w.D)}에 전쟁을 선포했습니다.${reason ? ' ' + reason : ''}`, a.pc + d.pc > 8 ? 3 : 2, a.cap, a.id);
+  addLog(S, `${a.name}${al(w.A)}이(가) ${d.name}${al(w.D)}에 전쟁을 선포했습니다.${reason ? ' ' + reason : ''}`, a.pc + d.pc > 8 ? 3 : 2, a.cap, a.id, d.id);
 }
 function stepWars(S, map) {
   const rng = S.rng, P = S.P, prv = map.provinces;
@@ -415,7 +423,7 @@ function captureProvince(S, map, q, from, to, w, src) {
   const wasCap = f.cap === q;
   P.owner[q] = to; P.pop[q] *= 0.9; P.unrest[q] = 0.45; if (P.city[q] > 1 && S.rng.chance(0.4)) P.city[q]--;
   w[w.A.includes(to) ? 'sA' : 'sD'] += 1 + (P.city[q] ? 1 : 0) + (wasCap ? 3 : 0); S.deaths.war += P.pop[q] * 0.1;
-  if (wasCap || P.city[q] >= 2) addLog(S, `${t.name}이(가) ${f.name}의 ${wasCap ? '수도 ' : ''}${S.cityName[q] || S.provName[q] || '도시'}을(를) 점령했습니다.`, wasCap ? 3 : 2, q, to);
+  if (wasCap || P.city[q] >= 2) addLog(S, `${t.name}이(가) ${f.name}의 ${wasCap ? '수도 ' : ''}${S.cityName[q] || S.provName[q] || '도시'}을(를) 점령했습니다.`, wasCap ? 3 : 2, q, to, from);
   S.fxQueue.push([q, 'war']);
   S.recentCaps.push({ p: src == null ? q : src, q, t: to, y: S.year, big: wasCap || P.city[q] >= 2 ? 1 : 0 });
   if (S.recentCaps.length > 90) S.recentCaps.splice(0, S.recentCaps.length - 90);
@@ -427,7 +435,7 @@ export function endWar(S, map, w, winner) {
   const dur = S.year - w.start; const wn = winner === 'A' ? A[0] : winner === 'D' ? D[0] : null;
   if (winner === 'A') { A[0].wins++; D[0].losses++; } else if (winner === 'D') { D[0].wins++; A[0].losses++; }
   if (wn) { const loser = winner === 'A' ? D[0] : A[0]; loser.stab = Math.max(0.05, loser.stab - 0.15); }
-  addLog(S, `${A[0].name}와(과) ${D[0].name}의 전쟁이 ${dur}년 만에 끝났습니다.${wn ? ` 승자: ${wn.name}.` : ' 승패 없이 휴전.'}`, A[0].pc + D[0].pc > 8 ? 3 : 2, A[0].cap, A[0].id);
+  addLog(S, `${A[0].name}와(과) ${D[0].name}의 전쟁이 ${dur}년 만에 끝났습니다.${wn ? ` 승자: ${wn.name}.` : ' 승패 없이 휴전.'}`, A[0].pc + D[0].pc > 8 ? 3 : 2, A[0].cap, A[0].id, D[0].id);
 }
 
 function stepDiplomacy(S, map) {
@@ -443,8 +451,8 @@ function stepDiplomacy(S, map) {
       if (warring) r = Math.min(r, -50);
       r = clamp(r, -100, 100); n.relat[m] = r; t.relat[n.id] = r;
       const allied = n.allies.includes(m);
-      if (!allied && r > 55 && n.allies.length < 3 && t.allies.length < 3 && rng.chance(0.25)) { n.allies.push(m); t.allies.push(n.id); addLog(S, `${n.name}와(과) ${t.name}이(가) 동맹을 맺었습니다.`, n.pc + t.pc > 8 ? 2 : 1, n.cap, n.id); }
-      else if (allied && (r < 15 || rng.chance(0.01))) { n.allies = n.allies.filter((x) => x !== m); t.allies = t.allies.filter((x) => x !== n.id); addLog(S, `${n.name}와(과) ${t.name}의 동맹이 깨졌습니다.`, 1, n.cap, n.id); }
+      if (!allied && r > 55 && n.allies.length < 3 && t.allies.length < 3 && rng.chance(0.25)) { n.allies.push(m); t.allies.push(n.id); addLog(S, `${n.name}와(과) ${t.name}이(가) 동맹을 맺었습니다.`, n.pc + t.pc > 8 ? 2 : 1, n.cap, n.id, t.id); }
+      else if (allied && (r < 15 || rng.chance(0.01))) { n.allies = n.allies.filter((x) => x !== m); t.allies = t.allies.filter((x) => x !== n.id); addLog(S, `${n.name}와(과) ${t.name}의 동맹이 깨졌습니다.`, 1, n.cap, n.id, t.id); }
       if (!warring && r > -10 && n.tech > 1.5 && t.tech > 1.5) { n.trade++; t.trade++; const a = cache[n.id] ?? (cache[n.id] = topCity(n)), b = cache[t.id] ?? (cache[t.id] = topCity(t)); if (a >= 0 && b >= 0 && S.routes.length < 90) S.routes.push([a, b]); }
     }
   }
