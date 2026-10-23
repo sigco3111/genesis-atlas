@@ -77,7 +77,7 @@ select,input{background:#12304d;border:1px solid #35597f;border-radius:8px;paddi
 #track.folded{width:auto;padding:6px 10px}
 #track.folded .thead{margin:0;font-size:13px}
 #track.folded .thead span{font-size:12px}
-@media(max-width:760px){#track{top:106px;left:8px;width:212px;font-size:12px}#track.folded{top:106px;width:auto}}
+@media(max-width:760px){#track{top:106px;left:8px;width:212px;font-size:12px;max-height:52vh;overflow-y:auto}#track.folded{top:106px;width:auto;max-height:none;overflow:visible}}
 #track .twar{cursor:pointer}
 #track .twar:hover{text-decoration:underline}
 #swar{cursor:pointer}

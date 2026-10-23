@@ -225,9 +225,15 @@ function pwEl(id) {
   return el;
 }
 // 모바일 동시 표시 정리: 미리보기→결과→추적 카드 순으로 위에서부터 쌓아 서로 덮지 않게 한다.
+// 시작점은 상단바(연도·속도·지도 레이어 버튼)의 실제 아래 끝 — 두 줄로 넓어진 모바일 상단바와도 겹치지 않게 한다.
+function floatBase() {
+  const t = $('top');
+  const b = t ? t.getBoundingClientRect().bottom : 0;
+  return Math.max(44, Math.ceil(b) + 6);
+}
 function layoutFloaters() {
   if (!isMobileLayout() || !document.body) return;
-  let top = 44;
+  let top = floatBase();
   for (const id of ['pwhint', 'pwres']) {
     const el = $(id);
     if (el && !el.classList.contains('hide')) {
@@ -236,7 +242,7 @@ function layoutFloaters() {
     }
   }
   const tr = $('track');
-  if (tr && !tr.classList.contains('hide')) tr.style.top = Math.max(106, top + 8) + 'px';
+  if (tr && !tr.classList.contains('hide')) tr.style.top = (top + 8) + 'px';
 }
 function hideFloater(el) { el.classList.add('hide'); layoutFloaters(); }
 function touchUI() { return (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || lastPtr === 'touch'; }
