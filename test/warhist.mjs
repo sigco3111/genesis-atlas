@@ -193,5 +193,21 @@ const ok = (cond, msg) => { if (!cond) { fails++; console.error('FAIL', msg); } 
   } else ok(true, '실제 종전 요약에서 지도 점 생성 (400년 내 주요 점령 전쟁 없음 — 건너뜀)');
 }
 
+// 12) 카메라 맞춤: UI에 가려진 가장자리(insets) 반영
+{
+  const pts = [{ x: 100, y: 100 }, { x: 300, y: 260 }];
+  const ins = { top: 220, bottom: 60, left: 0, right: 0 };
+  const f = fitWarView(pts, 390, 844, 0.5, ins);
+  ok(f && f.y < 180, '인셋 맞춤: 위쪽이 가려지면 카메라가 위를 봐 점들이 아래로 내려옴');
+  for (const p of pts) {
+    const sx = (p.x - f.x) * f.z + 390 / 2, sy = (p.y - f.y) * f.z + 844 / 2;
+    ok(sy >= ins.top && sy <= 844 - ins.bottom && sx >= 0 && sx <= 390, '인셋 맞춤: 모든 점이 가려지지 않는 보이는 영역 안');
+  }
+  const f2 = fitWarView(pts, 390, 844, 0.5);
+  ok(f2 && f2.x === 200 && f2.y === 180, '인셋 없으면 중심 그대로');
+  const f3 = fitWarView([{ x: 50, y: 50 }, { x: 90, y: 90 }], 800, 600, 0.5, { left: 300 });
+  ok(f3 && f3.x < 70, '인셋 맞춤: 왼쪽이 가려지면 카메라가 왼쪽을 봐 점들이 오른쪽으로');
+}
+
 if (fails) { console.error(fails + '개 실패'); process.exit(1); }
 console.log('ALL OK');

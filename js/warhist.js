@@ -84,12 +84,19 @@ export function warMapPoints(S, map, sum) {
   return pts;
 }
 
-// 점들을 화면에 담는 카메라 위치·줌: { x, y, z }. 점이 없으면 null
-export function fitWarView(pts, cssW, cssH, minZ) {
+// 점들을 화면에 담는 카메라 위치·줌: { x, y, z }. 점이 없으면 null.
+// insets는 상단바·플로터·하단 조작처럼 UI에 가려진 가장자리(px): { top, bottom, left, right }.
+// 가려진 영역을 뺀 보이는 영역 안에 모든 점이 들어오도록 줌과 중심을 함께 맞춘다.
+export function fitWarView(pts, cssW, cssH, minZ, insets) {
   if (!pts || !pts.length) return null;
+  const ins = insets || {};
+  const t = ins.top || 0, b = ins.bottom || 0, l = ins.left || 0, r = ins.right || 0;
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   for (const p of pts) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
   const bw = Math.max(30, x1 - x0), bh = Math.max(30, y1 - y0);
-  const z = Math.max(minZ, Math.min(6, Math.min(cssW / (bw + 120), cssH / (bh + 160))));
-  return { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z };
+  const pad = 26;
+  const aw = Math.max(60, cssW - l - r - pad * 2), ah = Math.max(60, cssH - t - b - pad * 2);
+  const z = Math.max(minZ, Math.min(6, Math.min(aw / bw, ah / bh)));
+  // 보이는 영역의 화면 중심은 (cssW + l - r) / 2, (cssH + t - b) / 2 이므로 점들의 중심이 그곳에 오게 카메라를 옮김
+  return { x: (x0 + x1) / 2 - (l - r) / (2 * z), y: (y0 + y1) / 2 - (t - b) / (2 * z), z };
 }

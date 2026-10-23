@@ -113,14 +113,24 @@ function showWarOnMap(sumId) {
   const aN = s.nm[s.A[0]] || '?', dN = s.nm[s.D[0]] || '?';
   histWar = { id: s.id, title: aN + ' 대 ' + dN, pts };
   R.histWar = histWar;
-  const f = fitWarView(pts, R.cssW, R.cssH, R.minZ);
-  if (f) { R.focusWorld(f.x, f.y, f.z); needRefresh = true; }
   const el = $('warview');
-  el.innerHTML = `<div class="wvtxt">🗺 <b>${histWar.title}</b> · ${yearStr(s.y0)}~${yearStr(s.y1)} · 점령 지점 ${pts.length}곳<em>과거 전쟁의 기록을 현재 지도 위에 표시 중 — 국경과 영토 색은 지금 상태입니다</em></div><button id="wvClose" title="표시 닫기">✕</button>`;
+  el.innerHTML = `<div class="wvtxt">🗺 <b>${histWar.title}</b> · ${yearStr(s.y0)}~${yearStr(s.y1)} · 점령 지점 ${pts.length}곳<em>과거 점령 기록 · 국경은 현재 기준</em></div><button id="wvClose" title="표시 닫기">✕</button>`;
   el.classList.remove('hide');
   $('wvClose').onclick = () => { hideWarView(); panelSig = ''; renderPanel(); };
-  layoutFloaters();
   if (isMobileLayout()) setPanelOpen(false);
+  layoutFloaters();
+  // 상단 플로터·하단 조작에 가려지는 가장자리를 뺀 보이는 영역에 모든 점령 지점이 들어오게 카메라 맞춤
+  const ins = { top: 0, bottom: 0, left: 0, right: 0 };
+  const wr = el.getBoundingClientRect();
+  if (wr.height > 0) ins.top = Math.max(0, Math.ceil(wr.bottom)) + 6;
+  if (isMobileLayout()) {
+    ins.bottom = 40; // 접힌 패널 손잡이(32px) + 여유
+    const pa = document.getElementById('pwarm');
+    if (pa && !pa.classList.contains('hide')) { const pr = pa.getBoundingClientRect(); if (pr.height > 0) ins.bottom = Math.max(ins.bottom, Math.ceil(R.cssH - pr.top) + 6); }
+  }
+  const f = fitWarView(pts, R.cssW, R.cssH, R.minZ, ins);
+  // focusWorld는 줌을 키우기만 하므로(Math.max), 화면 맞춤에는 계산된 줌을 직접 설정
+  if (f) { R.cam.x = f.x; R.cam.y = f.y; R.cam.z = f.z; R.clamp(); needRefresh = true; }
   toast('🗺 전쟁이 벌어진 곳을 지도에 표시합니다');
 }
 function hideWarView() {
