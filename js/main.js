@@ -8,7 +8,7 @@ const SAVE = 'genesis-atlas-save-v1';
 const CAPAGE_PREF = 'genesis-atlas-capage', WARPAUSE_PREF = 'genesis-atlas-warpause';
 let autoWarPause = false, prevTrkWars = [];
 try { autoWarPause = localStorage.getItem(WARPAUSE_PREF) === '1'; } catch (e) {}
-function readCapAge() { try { const v = +localStorage.getItem(CAPAGE_PREF); return CAP_AGE_STEPS.includes(v) ? v : 3; } catch (e) { return 3; } }
+function readCapAge() { try { const raw = localStorage.getItem(CAPAGE_PREF); if (raw === null) return 3; const v = +raw; return CAP_AGE_STEPS.includes(v) ? v : 3; } catch (e) { return 3; } }
 let map = null, S = null, R = null, running = false, speed = 1, prevSpeed = 1, acc = 0, last = 0, tab = 'world', lastRefresh = 0, needRefresh = true, earthCache = null;
 const SPEEDS = [[0, '⏸'], [0.5, '0.5'], [1, '1'], [3, '3'], [10, '10'], [100, '100']];
 const MODES = [['political', '정치'], ['culture', '문화'], ['religion', '종교'], ['pop', '인구'], ['tech', '기술'], ['unrest', '불안'], ['terrain', '지형']];
