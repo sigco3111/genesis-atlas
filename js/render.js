@@ -472,6 +472,7 @@ export class Renderer {
         const k = Math.round(sm.x / 1.2) + ':' + Math.round(sm.y / 1.2); if (!groups.has(k)) groups.set(k, []); groups.get(k).push([a, sm]);
       }
       if (this.armySm.size > smSeen.size + 40) { for (const id of this.armySm.keys()) if (!smSeen.has(id)) this.armySm.delete(id); }
+      const items = [];
       for (const arr of groups.values()) {
         for (let gi = 0; gi < arr.length; gi++) {
           const [a, sm] = arr[gi]; const nn = S.nations[a.nat]; if (!nn) continue;
@@ -480,15 +481,35 @@ export class Renderer {
           const [bx, by] = this.w2s(sm.x, sm.y);
           const px = bx + ox, py = by + oy;
           if (px < -30 || py < -30 || px > this.cssW + 30 || py > this.cssH + 30) continue;
-          const col = `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})`;
-          drawArmy(ctx, px, py, ss, col, this.time + a.id * 0.9, a.st, Math.min(9, Math.max(0, Math.floor(nn.tech || 0))), a);
-          if (z >= 1.1) {
-            const fs = Math.max(9.5, ss);
-            ctx.font = '700 ' + fs + 'px system-ui,sans-serif'; ctx.textAlign = 'center';
-            ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(5,15,28,.9)';
-            const tx = a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : String(Math.round(a.men));
-            ctx.strokeText(tx, px, py + ss * 2.0 + fs * 0.35); ctx.fillStyle = '#fff'; ctx.fillText(tx, px, py + ss * 2.0 + fs * 0.35);
-          }
+          items.push({ a, nn, px, py });
+        }
+      }
+      // 가까이 겹친 칩은 서로 밀어내 읽히게 하고, 교전 중인 적대 부대는 점선으로 잇고 가운데에 충돌 불꽃을 그린다
+      const bw = ss * 2.9, bh = ss * 4.1; // 칩+막대+병력 숫자가 차지하는 상자
+      for (let it2 = 0; it2 < 4; it2++) for (let i1 = 0; i1 < items.length; i1++) for (let i2 = i1 + 1; i2 < items.length; i2++) {
+        const A1 = items[i1], B1 = items[i2]; let dx = B1.px - A1.px, dy = B1.py - A1.py;
+        const ox = bw - Math.abs(dx), oy = bh - Math.abs(dy); if (ox <= 0 || oy <= 0) continue;
+        if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) dx = A1.a.id % 2 ? 1 : -1;
+        if (ox < oy) { const p = ox / 2 * Math.sign(dx || 1); A1.px -= p; B1.px += p; } else { const p = oy / 2 * Math.sign(dy || 1); A1.py -= p; B1.py += p; }
+      }
+      const clashes = [];
+      for (const it of items) {
+        if (it.a.st !== 'battle') continue;
+        let best = null, bd = 1e9;
+        for (const o of items) { if (o === it || o.a.st !== 'battle' || o.a.nat === it.a.nat) continue; const d = Math.hypot(o.px - it.px, o.py - it.py); if (d < bd) { bd = d; best = o; } }
+        if (best && bd <= 20 * z && it.a.id < best.a.id) clashes.push([it.px, it.py, best.px, best.py, it.a.id]);
+      }
+      for (const c of clashes) drawClash(ctx, c[0], c[1], c[2], c[3], ss, this.time + c[4] * 0.7);
+      for (const it of items) {
+        const { a, nn, px, py } = it;
+        const col = `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})`;
+        drawArmy(ctx, px, py, ss, col, this.time + a.id * 0.9, a.st, Math.min(9, Math.max(0, Math.floor(nn.tech || 0))), a);
+        if (z >= 1.1) {
+          const fs = Math.max(9.5, ss);
+          ctx.font = '700 ' + fs + 'px system-ui,sans-serif'; ctx.textAlign = 'center';
+          ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(5,15,28,.9)';
+          const tx = a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : String(Math.round(a.men));
+          ctx.strokeText(tx, px, py + ss * 2.0 + fs * 0.35); ctx.fillStyle = '#fff'; ctx.fillText(tx, px, py + ss * 2.0 + fs * 0.35);
         }
       }
     }
@@ -584,6 +605,19 @@ function drawUnitGlyph(ctx, s, era) {
   }
 }
 
+// 교전 중인 두 부대 사이: 붉은 점선 연결 + 중간에서 번쩍이는 충돌 불꽃
+function drawClash(ctx, x1, y1, x2, y2, s, tm) {
+  const x = (x1 + x2) / 2, y = (y1 + y2) / 2, pu = 0.65 + 0.35 * Math.sin(tm * 11);
+  ctx.save();
+  ctx.strokeStyle = `rgba(255,70,50,${0.55 + 0.3 * pu})`; ctx.lineWidth = Math.max(1.6, s * 0.2); ctx.setLineDash([s * 0.7, s * 0.5]); ctx.lineDashOffset = -tm * s * 3;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.setLineDash([]);
+  ctx.translate(x, y);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, s * 1.8); g.addColorStop(0, `rgba(255,240,180,${0.9 * pu})`); g.addColorStop(0.45, `rgba(255,120,40,${0.5 * pu})`); g.addColorStop(1, 'rgba(255,60,20,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, s * 1.8, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#fff6d0'; ctx.lineWidth = Math.max(1.4, s * 0.16); ctx.lineCap = 'round';
+  ctx.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 + tm * 1.3, r0 = s * 0.3, r1 = s * (i % 2 ? 0.75 : 1.15) * (0.8 + 0.2 * pu); ctx.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); ctx.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); } ctx.stroke();
+  ctx.restore();
+}
 function drawArmy(ctx, x, y, s, col, tm, st, era = 0, a = null) {
   ctx.save(); ctx.translate(x, y);
   const bob = st === 'march' || st === 'retreat' ? Math.abs(Math.sin(tm * 7)) * s * 0.12 : 0;
