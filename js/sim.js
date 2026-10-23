@@ -33,7 +33,7 @@ export function createState(map, opts = {}) {
   const S = {
     v: VERSION, seed, mapKind: map.kind, mode: opts.mode || 'emergent', year: 0, rng, techRate: opts.techRate ?? 1,
     P: { pop: new Float32Array(N), tech: new Float32Array(N), owner: new Int16Array(N).fill(-1), cult: new Int16Array(N).fill(-1), rel: new Int16Array(N).fill(-1), unrest: new Float32Array(N), city: new Uint8Array(N), fx: new Float32Array(N).fill(1), km: new Float32Array(N).fill(1), plague: new Uint8Array(N) },
-    nations: [], cultures: [], religions: [], wars: [], truce: {}, log: [], hist: [], routes: [], cityName: new Array(N).fill(''), provName: new Array(N).fill(''),
+    nations: [], cultures: [], religions: [], wars: [], truce: {}, log: [], hist: [], routes: [], ships: [], exped: [], seaPairs: {}, cityName: new Array(N).fill(''), provName: new Array(N).fill(''),
     auto: !!opts.auto, aggr: opts.aggr ?? 1, worldFirst: {}, stats: {}, fr: null, nextWar: 1, track: null,
     recentCaps: [], warHist: [],
     eventsOn: opts.events !== false, deaths: { war: 0, plague: 0, famine: 0 }, fxQueue: [], buffs: [],
@@ -264,6 +264,7 @@ export function step(S, map) {
   sampleTrack(S);
   stepNations(S, map);
   stepWars(S, map);
+  stepSeas(S, map);
   if (S.eventsOn) stepEvents(S, map);
   if (S.year % 5 === 0) stepDiplomacy(S, map);
   if (S.year % 10 === 0) { stepGov(S, map); sampleHistory(S); sampleNationHist(S); if (S.auto) autoGod(S, map); }
@@ -357,6 +358,7 @@ function stepNations(S, map) {
     }
     const capN = 6 + n.tech * 5 + (n.lead.exp > 1.2 ? 3 : 0);
     if (n.pc < capN && n.stab > 0.3 && rng.next() < 0.11 * (0.5 + n.lead.exp)) expand(S, map, n);
+    if (n.tech >= 2.2 && n.pc < capN && n.stab > 0.35 && rng.next() < 0.05 * (0.4 + n.lead.exp)) maybeLaunchExpedition(S, map, n);
     if (n.stab < 0.1 && n.pc >= 4 && rng.next() < 0.08) collapse(S, map, n);
     if (n.pop < 3 && n.pc <= 2) { for (let p = 0; p < N; p++) if (P.owner[p] === n.id) P.owner[p] = -1; killNation(S, n, '인구가 끊겨'); continue; }
     if (wc < 1 && n.stab > 0.35 && !(S.mode === 'real' && S.year < 2041) && rng.next() < 0.028 * S.aggr * (0.35 + n.lead.war) / (1 + 3.5 * Math.max(0, n.tech - 5.5)) / (S.mode === 'real' && S.year < 2126 ? 2.5 : 1)) declareWar(S, map, n);
@@ -368,8 +370,7 @@ function expand(S, map, n) {
   const rng = S.rng, P = S.P, prv = map.provinces; const cands = [];
   for (let p = 0; p < prv.length; p++) if (P.owner[p] === n.id) {
     for (const q of prv[p].land) if (P.owner[q] < 0 && prv[q].fert > 0.03) cands.push(q);
-    if (n.tech >= 2.2 && prv[p].k && rng.next() < 0.1) for (const q of prv[p].sea) if (P.owner[q] < 0 && prv[q].fert > 0.03) cands.push(q);
-  }
+  } // 바다 건너 식민은 탐험선(maybeLaunchExpedition)이 눈에 보이게 항해해 맺는다
   if (!cands.length) return;
   let best = -1, bs = -1; for (let i = 0; i < 4; i++) { const q = cands[rng.int(cands.length)]; const s = prv[q].fert * (1 + P.pop[q] / 500) + rng.next() * 0.2; if (s > bs) { bs = s; best = q; } }
   const q = best; P.owner[q] = n.id;
@@ -479,7 +480,8 @@ export function endWar(S, map, w, winner) {
 function stepDiplomacy(S, map) {
   const rng = S.rng; const alive = S.nations.filter((n) => n.alive); S.routes = [];
   const topCity = (n) => { let b = -1, bp = -1; for (let p = 0; p < map.provinces.length; p++) if (S.P.owner[p] === n.id && S.P.pop[p] * (S.P.city[p] + 1) > bp) { bp = S.P.pop[p] * (S.P.city[p] + 1); b = p; } return b; };
-  const cache = {}; for (const n of alive) n.trade = 0;
+  const topPort = (n) => { let b = -1, bp = -1; for (let p = 0; p < map.provinces.length; p++) if (S.P.owner[p] === n.id && map.provinces[p].k && S.P.pop[p] * (S.P.city[p] + 1) > bp) { bp = S.P.pop[p] * (S.P.city[p] + 1); b = p; } return b; };
+  const cache = {}, pcache = {}; for (const n of alive) n.trade = 0;
   for (const n of alive) {
     const nb = neighborsOf(S, n);
     for (const [m, info] of nb) {
@@ -491,9 +493,19 @@ function stepDiplomacy(S, map) {
       const allied = n.allies.includes(m);
       if (!allied && r > 55 && n.allies.length < 3 && t.allies.length < 3 && rng.chance(0.25)) { n.allies.push(m); t.allies.push(n.id); addLog(S, `${n.name}와(과) ${t.name}이(가) 동맹을 맺었습니다.`, n.pc + t.pc > 8 ? 2 : 1, n.cap, n.id, t.id); }
       else if (allied && (r < 15 || rng.chance(0.01))) { n.allies = n.allies.filter((x) => x !== m); t.allies = t.allies.filter((x) => x !== n.id); addLog(S, `${n.name}와(과) ${t.name}의 동맹이 깨졌습니다.`, 1, n.cap, n.id, t.id); }
-      if (!warring && r > -10 && n.tech > 1.5 && t.tech > 1.5) { n.trade++; t.trade++; const a = cache[n.id] ?? (cache[n.id] = topCity(n)), b = cache[t.id] ?? (cache[t.id] = topCity(t)); if (a >= 0 && b >= 0 && S.routes.length < 90) S.routes.push([a, b]); }
+      if (!warring && r > -10 && n.tech > 1.5 && t.tech > 1.5) {
+        n.trade++; t.trade++;
+        let a = cache[n.id] ?? (cache[n.id] = topCity(n)), b = cache[t.id] ?? (cache[t.id] = topCity(t)), sea = 0;
+        const ap = pcache[n.id] ?? (pcache[n.id] = topPort(n)), bp = pcache[t.id] ?? (pcache[t.id] = topPort(t));
+        if (ap >= 0 && bp >= 0 && (!info.land || routeWaterFrac(map, ap, bp) > 0.45)) { a = ap; b = bp; sea = 1; }
+        if (a >= 0 && b >= 0 && S.routes.length < 90) {
+          S.routes.push([a, b, sea]);
+          if (sea) { const k = tkey(n.id, m); if (!S.seaPairs[k]) { S.seaPairs[k] = 1; if (n.pc + t.pc >= 5) addLog(S, `${n.name}와(과) ${t.name} 사이에 바닷길이 열렸습니다. 무역선이 오갑니다.`, 1, a, n.id, m); } }
+        }
+      }
     }
   }
+  syncShips(S, map);
 }
 function stepGov(S, map) {
   for (const n of S.nations) {
@@ -515,6 +527,95 @@ function eraCheck(S, map) {
       else if (n.pc >= 3 && e <= 3) addLog(S, `${n.name}이(가) ${ERA_NAMES[e]}에 진입했습니다.`, 1, n.cap, n.id);
     } else if (e < n.era - 1) n.era = e;
   }
+}
+
+// ---------- 항해: 무역선·탐험선 (바닷길이 눈에 보이게 오간다) ----------
+// 두 지방을 잇는 직선이 바다 위를 지나는 비율 (해상 항로 판별용)
+function routeWaterFrac(map, a, b) {
+  const A = map.provinces[a], B = map.provinces[b]; let sea = 0; const K = 9;
+  for (let i = 1; i < K; i++) {
+    const f = i / K; const x = Math.round(A.ax + (B.ax - A.ax) * f), y = Math.round(A.ay + (B.ay - A.ay) * f);
+    if (x < 0 || y < 0 || x >= map.W || y >= map.H || !map.land[y * map.W + x]) sea++;
+  }
+  return sea / (K - 1);
+}
+// 항로 재계산(5년) 때 무역선 배정을 맞춘다: 사라진 항로의 배는 회수, 새 항로에는 배를 띄움
+function syncShips(S, map) {
+  const want = new Map();
+  for (const r of S.routes) if (r[2]) want.set(r[0] + '_' + r[1], r);
+  S.ships = (S.ships || []).filter((s) => want.has(s.a + '_' + s.b));
+  for (const [k, r] of want) {
+    const have = S.ships.reduce((c, s) => c + (s.a === r[0] && s.b === r[1] ? 1 : 0), 0);
+    const pa = map.provinces[r[0]], pb = map.provinces[r[1]];
+    const len = Math.hypot(pa.ax - pb.ax, pa.ay - pb.ay);
+    const target = Math.min(2, 1 + (len > 180 ? 1 : 0));
+    for (let i = have; i < target; i++) S.ships.push({ a: r[0], b: r[1], t: S.rng.next(), dir: S.rng.chance(0.5) ? 1 : -1, nat: S.P.owner[r[0]] });
+  }
+}
+// 탐험선 출항: 연안 국가가 먼 바다 건너 미개척 해안으로 정착 원정을 보낸다
+export function maybeLaunchExpedition(S, map, n) {
+  const rng = S.rng, P = S.P, prv = map.provinces;
+  if (n.tech < 2.2 || n.stab < 0.35) return false;
+  if (S.exped.reduce((c, e) => c + (e.n === n.id ? 1 : 0), 0) >= 2) return false;
+  let port = -1, bp = 0;
+  for (let p = 0; p < prv.length; p++) if (P.owner[p] === n.id && prv[p].k && P.pop[p] > bp) { bp = P.pop[p]; port = p; }
+  if (port < 0 || bp < 30) return false;
+  const A = prv[port];
+  const maxRange = 60 + n.tech * 50, minRange = 12;
+  let best = -1, bs = 0;
+  for (let q = 0; q < prv.length; q++) {
+    const o = prv[q];
+    if (!o.k || P.owner[q] >= 0 || o.fert <= 0.03) continue;
+    if (P.pop[q] >= (capacity(S, map, q) || 1) * 0.35) continue;
+    const d = Math.hypot(o.ax - A.ax, o.ay - A.ay);
+    if (d < minRange || d > maxRange) continue;
+    if (routeWaterFrac(map, port, q) < 0.55) continue; // 항로 대부분이 바다여야 배가 간다
+    const sc = o.fert * (1 + d / 150) + rng.next() * 0.35;
+    if (sc > bs) { bs = sc; best = q; }
+  }
+  if (best < 0) return false;
+  const B = prv[best];
+  const dist = Math.hypot(B.ax - A.ax, B.ay - A.ay);
+  const dur = clamp(Math.round(dist / (9 + n.tech * 3.5)), 2, 16);
+  S.exped.push({ n: n.id, from: port, target: best, pts: [[A.ax, A.ay], [B.ax, B.ay]], dist: Math.round(dist), t: 0, dur });
+  if (n.pc >= 2) addLog(S, `${n.name}의 탐험선이 ${S.provName[port] || '항구'}을(를) 떠나 먼 바다로 향합니다.`, 1, port, n.id);
+  return true;
+}
+function stepSeas(S, map) {
+  const P = S.P, prv = map.provinces;
+  // 무역선: 항로를 왕복한다. 입항 때 두 항구 사이에 지식이 오간다
+  for (const s of S.ships) {
+    const pa = prv[s.a], pb = prv[s.b];
+    const len = Math.hypot(pa.ax - pb.ax, pa.ay - pb.ay);
+    s.t += s.dir / Math.max(3, len / 26);
+    if (s.t >= 1 || s.t <= 0) {
+      const port = s.t >= 1 ? s.b : s.a; s.t = clamp(s.t, 0, 1); s.dir = -s.dir;
+      const hi = Math.max(P.tech[s.a], P.tech[s.b]), lo = Math.min(P.tech[s.a], P.tech[s.b]);
+      if (hi > lo && P.pop[port] > 15) { const q = P.tech[s.a] < P.tech[s.b] ? s.a : s.b; P.tech[q] += (hi - lo) * 0.012; }
+    }
+  }
+  // 탐험선: 항해 → 해외 정착지 건설
+  for (const e of S.exped) {
+    const n = S.nations[e.n];
+    if (!n || !n.alive) { e.dead = true; continue; }
+    const risk = 0.02 * Math.max(0.15, (6 - Math.min(n.tech, 6)) / 4);
+    if (S.rng.next() < risk / Math.max(1, e.dur)) { e.dead = true; addLog(S, `${n.name}의 탐험선이 거친 바다에 휩쓸려 소식이 끊겼습니다.`, 1, e.from, e.n); continue; }
+    e.t += 1 / Math.max(1, e.dur);
+    if (e.t >= 1) {
+      e.dead = true;
+      const q = e.target;
+      if (P.owner[q] < 0) {
+        const src = e.from; const mv = clamp(P.pop[src] * 0.04, 12, 80);
+        P.pop[src] = Math.max(0, P.pop[src] - mv); P.pop[q] += mv;
+        P.owner[q] = e.n; P.cult[q] = n.cult; P.rel[q] = P.rel[src]; P.tech[q] = Math.max(P.tech[q], P.tech[src] * 0.9);
+        nameProvince(S, map, q);
+        const far = (e.dist || 0) >= 150;
+        addLog(S, `${n.name}의 탐험선이 ${S.provName[q] || '새 땅'}에 닿아 해외 정착지를 세웠습니다.${far ? ' 대양을 건너온 대항해였습니다.' : ''}`, far ? 3 : 2, q, e.n);
+        S.fxQueue.push([q, 'settle']);
+      } else addLog(S, `${n.name}의 탐험선이 닿으려던 ${S.provName[q] || '땅'}은 이미 다른 세력의 것이었습니다.`, 1, q, e.n);
+    }
+  }
+  S.exped = S.exped.filter((e) => !e.dead);
 }
 
 // ---------- 자연 사건 ----------
@@ -760,7 +861,7 @@ export function restore(json) {
   const S = typeof json === 'string' ? JSON.parse(json) : json;
   if (!S.P.km) S.P.km = new Array(S.P.pop.length).fill(1);
   for (const k of Object.keys(TYPED)) S.P[k] = TYPED[k].from(S.P[k]);
-  const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1; S.recentCaps = S.recentCaps || []; S.warHist = S.warHist || []; S.buffs = S.buffs || [];
+  const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1; S.recentCaps = S.recentCaps || []; S.warHist = S.warHist || []; S.buffs = S.buffs || []; S.ships = S.ships || []; S.exped = S.exped || []; S.seaPairs = S.seaPairs || {};
   for (const w of S.wars) { w.caps = w.caps || []; w.A0 = w.A0 || [...w.A]; w.D0 = w.D0 || [...w.D]; }
   for (const n of S.nations) if (!n.hist || !n.hist.length) n.hist = [[S.year, Math.round(n.pop || 0), n.pc || 0, n.stab == null ? 0.5 : Math.round(n.stab * 1000) / 1000]];
   return S;

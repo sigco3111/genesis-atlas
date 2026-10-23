@@ -237,16 +237,61 @@ export class Renderer {
   w2s(x, y) { const c = this.cam; return [(x - c.x) * c.z + this.cssW / 2, (y - c.y) * c.z + this.cssH / 2]; }
   drawOverlayVec(ctx, S) {
     const c = this.cam, z = c.z; const map = this.map;
-    // 교역로
+    // 교역로 (육상: 금색 점선, 해상: 하늘색 점선) + 무역선
     if (this.showTrade && S.routes) {
       ctx.lineWidth = Math.max(1, z * 0.35); ctx.setLineDash([z * 1.2, z * 1.6]); ctx.lineDashOffset = -this.time * 12;
-      ctx.strokeStyle = 'rgba(255,225,140,0.55)';
       for (const r of S.routes) {
         const a = map.provinces[r[0]], b = map.provinces[r[1]]; const [x1, y1] = this.w2s(a.ax, a.ay), [x2, y2] = this.w2s(b.ax, b.ay);
         if (Math.abs(x1 - x2) > this.cssW * 1.2) continue;
+        ctx.strokeStyle = r[2] ? 'rgba(140,205,255,0.5)' : 'rgba(255,225,140,0.55)';
         ctx.beginPath(); ctx.moveTo(x1, y1); const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.hypot(x2 - x1, y2 - y1) * 0.12; ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke();
       }
       ctx.setLineDash([]);
+      // 무역선: 항로 호를 따라 왕복하는 돛단배
+      if (S.ships && S.ships.length) {
+        const ss = Math.max(4, Math.min(10, 3.0 * Math.sqrt(z)));
+        for (const sh of S.ships) {
+          const a = map.provinces[sh.a], b = map.provinces[sh.b]; if (!a || !b) continue;
+          const [x1, y1] = this.w2s(a.ax, a.ay), [x2, y2] = this.w2s(b.ax, b.ay);
+          if (Math.abs(x1 - x2) > this.cssW * 1.2) continue;
+          const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.hypot(x2 - x1, y2 - y1) * 0.12;
+          const tt = sh.dir > 0 ? sh.t : 1 - sh.t;
+          const u = 1 - tt;
+          const px = u * u * x1 + 2 * u * tt * mx + tt * tt * x2, py = u * u * y1 + 2 * u * tt * my + tt * tt * y2;
+          if (px < -20 || py < -20 || px > this.cssW + 20 || py > this.cssH + 20) continue;
+          const dx = 2 * u * (mx - x1) + 2 * tt * (x2 - mx), dy = 2 * u * (my - y1) + 2 * tt * (y2 - my);
+          const nn = S.nations[sh.nat];
+          ctx.globalAlpha = Math.min(1, 0.3 + 3 * Math.min(tt, 1 - tt));
+          drawShip(ctx, px, py, Math.atan2(dy, dx), ss, nn && nn.alive ? `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})` : null, '#f2ead8');
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+    // 탐험선: 항해 경로 + 깃발을 단 배 (교역로 표시와 무관하게 항상 표시)
+    if (S.exped && S.exped.length) {
+      const ss = Math.max(5.5, Math.min(13, 4.0 * Math.sqrt(z)));
+      for (const e of S.exped) {
+        const nn = S.nations[e.n]; if (!nn || !e.pts) continue;
+        const col = `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})`;
+        const [x1, y1] = this.w2s(e.pts[0][0], e.pts[0][1]), [x2, y2] = this.w2s(e.pts[1][0], e.pts[1][1]);
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.hypot(x2 - x1, y2 - y1) * 0.12;
+        const tt = Math.min(0.9999, Math.max(0, e.t)), u = 1 - tt;
+        const px = u * u * x1 + 2 * u * tt * mx + tt * tt * x2, py = u * u * y1 + 2 * u * tt * my + tt * tt * y2;
+        // 계획 항로 전체를 옅은 점선으로
+        ctx.globalAlpha = 0.4; ctx.strokeStyle = col; ctx.lineWidth = Math.max(1, z * 0.35);
+        ctx.setLineDash([Math.max(2, z), Math.max(3, z * 1.4)]); ctx.lineDashOffset = -this.time * 8;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke();
+        ctx.setLineDash([]); ctx.globalAlpha = 1;
+        // 목적지 펄스 표시
+        const pu = 0.5 + 0.5 * Math.sin(this.time * 3.5);
+        ctx.globalAlpha = 0.35 + 0.3 * pu; ctx.strokeStyle = col; ctx.lineWidth = Math.max(1.2, z * 0.3);
+        ctx.setLineDash([4, 4]); ctx.lineDashOffset = -this.time * 6;
+        ctx.beginPath(); ctx.arc(x2, y2, Math.max(6, Math.min(14, z * 2.2)) * (1 + pu * 0.25), 0, 7); ctx.stroke(); ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+        if (px < -30 || py < -30 || px > this.cssW + 30 || py > this.cssH + 30) continue;
+        const dx = 2 * u * (mx - x1) + 2 * tt * (x2 - mx), dy = 2 * u * (my - y1) + 2 * tt * (y2 - my);
+        drawShip(ctx, px, py, Math.atan2(dy, dx), ss * 1.25, col, '#fff6e0');
+      }
     }
     // 전쟁 시각화: 최근 점령(진격 화살표·점령 링) + 교전 지역 마커
     const keep = this.capAge == null ? 3 : this.capAge;
@@ -400,13 +445,30 @@ export class Renderer {
     g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,8,20,.42)'); ctx.fillStyle = g; ctx.fillRect(0, 0, this.cssW, this.cssH);
   }
 }
+// 돛단배: 선체 + 돛 + 국가색 깃발. ang은 진행 방향(라디안).
+function drawShip(ctx, x, y, ang, s, flag, sail) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+  // 물살 자국
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = Math.max(1, s * 0.14); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-s * 1.1, -s * 0.22); ctx.lineTo(-s * 2.0, -s * 0.5); ctx.moveTo(-s * 1.1, s * 0.22); ctx.lineTo(-s * 2.0, s * 0.5); ctx.stroke();
+  // 선체
+  ctx.fillStyle = '#4a3826';
+  ctx.beginPath(); ctx.moveTo(-s, -s * 0.28); ctx.lineTo(s * 0.8, -s * 0.28); ctx.lineTo(s, 0); ctx.lineTo(s * 0.8, s * 0.28); ctx.lineTo(-s, s * 0.28); ctx.quadraticCurveTo(-s * 1.25, 0, -s, -s * 0.28); ctx.closePath(); ctx.fill();
+  // 돛
+  ctx.fillStyle = sail || '#f2ead8';
+  ctx.beginPath(); ctx.moveTo(s * 0.05, -s * 0.1); ctx.lineTo(s * 0.05, -s * 1.35); ctx.lineTo(s * 0.85, -s * 0.15); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-s * 0.08, -s * 0.1); ctx.lineTo(-s * 0.08, -s * 1.1); ctx.lineTo(-s * 0.62, -s * 0.14); ctx.closePath(); ctx.fill();
+  // 깃발
+  if (flag) { ctx.fillStyle = flag; ctx.fillRect(s * 0.05, -s * 1.62, s * 0.55, s * 0.3); }
+  ctx.restore();
+}
 // 권능·재해 발동 효과: 종류별로 구분되는 모양으로 그린다.
 const FX_STYLE = {
   bless: { c: '#7fd4ff' }, drought: { c: '#e8b04b' }, plague: { c: '#9be26a' },
   quake: { c: '#241c12', dust: '#d8cdb4' }, volcano: { c: '#ff7a3c' }, meteor: { c: '#ffd27a' },
   flood: { c: '#6fb7ff' }, tribe: { c: '#b8e986' }, prophet: { c: '#ffd76a' },
   hero: { c: '#ffd24a' }, revolt: { c: '#ff6a3c' }, peace: { c: '#bfe3ff' },
-  war: { c: '#ff5050' }, warshout: { c: '#ff3b30' }, goldenage: { c: '#ffcf4d' }, migrate: { c: '#a8d8ff' }, warshield: { c: '#7ab8ff' }, warheal: { c: '#8ff0a4' }, mobilize: { c: '#ff9f43' },
+  war: { c: '#ff5050' }, warshout: { c: '#ff3b30' }, goldenage: { c: '#ffcf4d' }, migrate: { c: '#a8d8ff' }, warshield: { c: '#7ab8ff' }, warheal: { c: '#8ff0a4' }, mobilize: { c: '#ff9f43' }, settle: { c: '#7fe0c3' },
 };
 function drawFx(ctx, e, x, y, z, time) {
   const k = e.t / 2.4, a = 1 - k;
@@ -646,6 +708,17 @@ function drawFx(ctx, e, x, y, z, time) {
         ctx.beginPath(); ctx.moveTo(x - wdt, cy + 3 * u); ctx.lineTo(x, cy - 3 * u); ctx.lineTo(x + wdt, cy + 3 * u); ctx.stroke();
       }
       break; }
+    case 'settle': { // 정착: 파도를 밀고 올라오는 청록 불빛 + 링
+      ring((5 + k * 30) * u, 2.5 * a + 0.5); ring((2 + k * 16) * u, 1.5);
+      ctx.fillStyle = st.c;
+      for (let n = 0; n < 10; n++) {
+        const sx = x + (rnd(n) - 0.5) * 34 * u;
+        const sy = y + 10 * u - ((k * 1.4 + rnd(n + 17)) % 1) * 38 * u;
+        ctx.globalAlpha = a * (0.5 + rnd(n + 5) * 0.5);
+        ctx.beginPath(); ctx.arc(sx, sy, (1.4 + rnd(n + 23) * 1.8) * u, 0, 7); ctx.fill();
+      }
+      break;
+    }
     default: { // 기존 공통 이중 링 (전쟁 점령 등)
       ring(6 + k * 46 * u, 3 * a + 1, e.color);
       ring(3 + k * 20, 2 * a + 0.5, e.color);
