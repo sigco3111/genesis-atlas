@@ -3,6 +3,7 @@ import { RNG } from './rng.js';
 import { makeLang, genName, genReligion, genCultureName, hslToRgb, ERA_NAMES, yearStr, numStr } from './names.js';
 import { complement, stepEcon, ensureEco, newEco, dockShip, refundCargo, stabBonus } from './econ.js';
 import { snapWar, recordCap, buildSummary, pushSummary } from './warhist.js';
+import { stepArmies, onWarEnd } from './units.js';
 
 export const VERSION = 1;
 const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
@@ -36,7 +37,7 @@ export function createState(map, opts = {}) {
     P: { pop: new Float32Array(N), tech: new Float32Array(N), owner: new Int16Array(N).fill(-1), cult: new Int16Array(N).fill(-1), rel: new Int16Array(N).fill(-1), unrest: new Float32Array(N), city: new Uint8Array(N), fx: new Float32Array(N).fill(1), km: new Float32Array(N).fill(1), plague: new Uint8Array(N) },
     nations: [], cultures: [], religions: [], wars: [], truce: {}, log: [], hist: [], routes: [], ships: [], carr: [], exped: [], seaPairs: {}, landPairs: {}, cityName: new Array(N).fill(''), provName: new Array(N).fill(''),
     auto: !!opts.auto, aggr: opts.aggr ?? 1, worldFirst: {}, stats: {}, fr: null, nextWar: 1, track: null,
-    recentCaps: [], warHist: [],
+    recentCaps: [], warHist: [], armies: [], nextArmy: 1,
     eventsOn: opts.events !== false, deaths: { war: 0, plague: 0, famine: 0 }, fxQueue: [], buffs: [],
   };
   if (S.mode === 'real') initReal(S, map, opts); else initEmergent(S, map, opts);
@@ -266,6 +267,7 @@ export function step(S, map) {
   sampleTrack(S);
   stepNations(S, map);
   stepWars(S, map);
+  stepArmies(S, map);
   stepEcon(S, map, addLog);
   stepSeas(S, map);
   if (S.eventsOn) stepEvents(S, map);
@@ -435,18 +437,7 @@ function stepWars(S, map) {
     const A = w.A.map((i) => S.nations[i]).filter((n) => n.alive), D = w.D.map((i) => S.nations[i]).filter((n) => n.alive);
     if (!A.length || !D.length) { if (A.length || D.length) endWar(S, map, w, A.length ? 'A' : 'D'); else S.wars = S.wars.filter((z) => z !== w); continue; } // 한쪽 멸망으로 끝난 전쟁도 결과 요약에 남김
     const sA = A.reduce((s, n) => s + n.mil, 0) * (1 - 0.4 * w.exA), sD = D.reduce((s, n) => s + n.mil, 0) * 1.1 * (1 - 0.4 * w.exD); const tot = sA + sD + 1;
-    const attempt = (atk, def, sAtk, sDef) => {
-      const pairs = []; for (const a of atk) for (const d of def) { const l = S.fr.get(a.id * 4096 + d.id); if (l) for (const e of l) pairs.push(e); }
-      if (!pairs.length) return;
-      const tries = 1 + Math.floor(Math.sqrt(pairs.length) / 2);
-      for (let i = 0; i < tries; i++) {
-        const [p, q, ty] = pairs[rng.int(pairs.length)]; if (P.owner[p] === P.owner[q] || P.owner[p] < 0 || P.owner[q] < 0) continue;
-        const defn = (1 + 0.45 * prv[q].e + P.city[q] * 0.1 + (ty ? 0.5 : 0)) * (buffOf(S, P.owner[q], 'shield') ? 1.5 : 1);
-        const pc = 0.42 / (1 + Math.exp(-(sAtk / (sDef * defn + 1) - 1) * 2.4));
-        if (rng.next() < pc) captureProvince(S, map, q, P.owner[q], P.owner[p], w, p);
-      }
-    };
-    attempt(A, D, sA, sD); attempt(D, A, sD, sA);
+    // 점령은 더 이상 무작위 확률이 아니라 부대의 포위로만 일어난다 (units.js stepArmies)
     w.exA += 0.010 + 0.03 * sD / tot; w.exD += 0.010 + 0.03 * sA / tot;
     for (const n of A) n.exh = Math.max(n.exh, w.exA * (buffOf(S, n.id, 'shield') ? 0.5 : 1)); for (const n of D) n.exh = Math.max(n.exh, w.exD * (buffOf(S, n.id, 'shield') ? 0.5 : 1));
     for (const [k, list] of S.fr) { const x = (k / 4096) | 0, y = k % 4096; if (w.A.includes(x) && w.D.includes(y)) for (const e of list) { const d1 = P.pop[e[0]] * 0.004, d2 = P.pop[e[1]] * 0.004; P.pop[e[0]] -= d1; P.pop[e[1]] -= d2; S.deaths.war += d1 + d2; } }
@@ -456,7 +447,7 @@ function stepWars(S, map) {
     if (dcap || acap || ex > 1 || (dur >= 5 && rng.next() < 0.07 + ex * 0.15) || (dur >= 2 && Math.abs(sA - sD) / tot > 0.7 && rng.next() < 0.2)) endWar(S, map, w, dcap ? 'A' : acap ? 'D' : (w.sA > w.sD ? 'A' : w.sD > w.sA ? 'D' : ''));
   }
 }
-function captureProvince(S, map, q, from, to, w, src) {
+export function captureProvince(S, map, q, from, to, w, src) {
   const P = S.P; const f = S.nations[from], t = S.nations[to]; if (!f.alive || !t.alive) return;
   const wasCap = f.cap === q;
   P.owner[q] = to; P.pop[q] *= 0.9; P.unrest[q] = 0.45; if (P.city[q] > 1 && S.rng.chance(0.4)) P.city[q]--;
@@ -469,6 +460,7 @@ function captureProvince(S, map, q, from, to, w, src) {
 }
 export function endWar(S, map, w, winner) {
   S.wars = S.wars.filter((z) => z !== w);
+  onWarEnd(S, map, w);
   for (const a of w.A) for (const d of w.D) { S.truce[tkey(a, d)] = S.year + 12 + S.rng.int(18); S.nations[a].relat[d] = Math.min(S.nations[a].relat[d] || 0, -20); S.nations[d].relat[a] = Math.min(S.nations[d].relat[a] || 0, -20); }
   const sum = buildSummary(S, w, winner); pushSummary(S, sum);
   const aId = sum.A[0], dId = sum.D[0];
@@ -1123,7 +1115,7 @@ export function restore(json) {
   const S = typeof json === 'string' ? JSON.parse(json) : json;
   if (!S.P.km) S.P.km = new Array(S.P.pop.length).fill(1);
   for (const k of Object.keys(TYPED)) S.P[k] = TYPED[k].from(S.P[k]);
-  const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1; S.recentCaps = S.recentCaps || []; S.warHist = S.warHist || []; S.buffs = S.buffs || []; S.ships = S.ships || []; S.carr = S.carr || []; S.exped = S.exped || []; S.seaPairs = S.seaPairs || {}; S.landPairs = S.landPairs || {}; ensureEco(S);
+  const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1; S.recentCaps = S.recentCaps || []; S.warHist = S.warHist || []; S.buffs = S.buffs || []; S.ships = S.ships || []; S.carr = S.carr || []; S.exped = S.exped || []; S.armies = S.armies || []; S.nextArmy = S.nextArmy || 1; S.seaPairs = S.seaPairs || {}; S.landPairs = S.landPairs || {}; ensureEco(S);
   for (const w of S.wars) { w.caps = w.caps || []; w.A0 = w.A0 || [...w.A]; w.D0 = w.D0 || [...w.D]; }
   for (const n of S.nations) if (!n.hist || !n.hist.length) n.hist = [[S.year, Math.round(n.pop || 0), n.pc || 0, n.stab == null ? 0.5 : Math.round(n.stab * 1000) / 1000]];
   return S;

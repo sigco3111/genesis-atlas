@@ -338,6 +338,23 @@ export class Renderer {
         drawShip(ctx, px, py, ang, ss * 1.25, col, '#fff6e0');
       }
     }
+    // 자율 부대: 깃발 칩 + 병력 수. 고속 진행에서는 숨긴다 (main.js가 showArmies로 제어)
+    if (S.armies && S.armies.length && this.showArmies !== false) {
+      const ss = Math.max(4.5, Math.min(9.5, 2.7 * Math.sqrt(z)));
+      for (const a of S.armies) {
+        const nn = S.nations[a.nat]; if (!nn) continue;
+        const [px, py] = this.w2s(a.x, a.y);
+        if (px < -24 || py < -24 || px > this.cssW + 24 || py > this.cssH + 24) continue;
+        const col = `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})`;
+        drawArmy(ctx, px, py, ss, col, this.time + a.id * 0.9, a.st);
+        if (z >= 2.2) {
+          ctx.font = '600 10px system-ui,sans-serif'; ctx.textAlign = 'center';
+          ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(5,15,28,.85)';
+          const tx = a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : String(Math.round(a.men));
+          ctx.strokeText(tx, px, py + ss * 2.1); ctx.fillStyle = '#fff'; ctx.fillText(tx, px, py + ss * 2.1);
+        }
+      }
+    }
     // 전쟁 시각화: 최근 점령(진격 화살표·점령 링) + 교전 지역 마커
     const keep = this.capAge == null ? 3 : this.capAge;
     const caps = visibleCaps(S.recentCaps, S.year, keep);
@@ -503,6 +520,44 @@ function drawGlyph(ctx, x, y, s, g, rgb, tm) {
   else if (g === 2) { ctx.beginPath(); ctx.moveTo(-u * 0.5, -u * 0.75); ctx.lineTo(u * 0.5, -u * 0.75); ctx.lineTo(u * 1.0, u * 0.1); ctx.lineTo(-u * 1.0, u * 0.1); ctx.closePath(); ctx.fill(); ctx.fillRect(-u * 1.05, u * 0.22, u * 2.1, u * 0.7); ctx.fillStyle = 'rgba(8,20,34,.7)'; ctx.fillRect(-u * 0.55, -u * 0.5, u * 0.5, u * 0.18); }
   else if (g === 3) { ctx.beginPath(); ctx.moveTo(0, -u * 1.05); ctx.quadraticCurveTo(u * 1.0, -u * 0.1, 0, u * 0.95); ctx.quadraticCurveTo(-u * 1.0, -u * 0.1, 0, -u * 1.05); ctx.fill(); ctx.strokeStyle = 'rgba(8,20,34,.85)'; ctx.lineWidth = Math.max(1, s * 0.1); ctx.beginPath(); ctx.moveTo(0, -u * 0.6); ctx.lineTo(0, u * 0.7); ctx.stroke(); }
   else if (g === 4) { ctx.beginPath(); ctx.moveTo(0, -u * 1.0); ctx.lineTo(u * 0.95, 0); ctx.lineTo(0, u * 1.0); ctx.lineTo(-u * 0.95, 0); ctx.closePath(); ctx.fill(); const tw = 0.5 + 0.5 * Math.sin(tm * 3); ctx.globalAlpha = 0.5 + 0.5 * tw; ctx.fillStyle = '#fff'; ctx.fillRect(-u * 0.12, -u * 0.55, u * 0.24, u * 0.24); }
+  ctx.restore();
+}
+// 자율 부대: 깃발이 달린 칩. st: march/siege/battle/garrison/retreat
+function drawArmy(ctx, x, y, s, col, tm, st) {
+  ctx.save(); ctx.translate(x, y);
+  const bob = st === 'march' || st === 'retreat' ? Math.abs(Math.sin(tm * 7)) * s * 0.12 : 0;
+  ctx.translate(0, -bob);
+  // 그림자
+  ctx.globalAlpha = 0.25; ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(0, s * 0.62 + bob, s * 0.7, s * 0.22, 0, 0, 7); ctx.fill();
+  ctx.globalAlpha = 1;
+  // 몸체 칩 (진한 테두리 + 국가색)
+  ctx.fillStyle = 'rgba(18,16,14,0.92)';
+  ctx.beginPath(); ctx.roundRect(-s * 0.78, -s * 0.5, s * 1.56, s * 1.05, s * 0.28); ctx.fill();
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.roundRect(-s * 0.62, -s * 0.34, s * 1.24, s * 0.73, s * 0.2); ctx.fill();
+  // 병사 점들: 병력 규모를 암시
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(-s * 0.34 + i * s * 0.34, s * 0.03, s * 0.09, 0, 7); ctx.fill(); }
+  // 깃발
+  ctx.strokeStyle = '#2b2119'; ctx.lineWidth = Math.max(1, s * 0.1); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(s * 0.5, -s * 0.4); ctx.lineTo(s * 0.5, -s * 1.5); ctx.stroke();
+  ctx.fillStyle = col; ctx.fillRect(s * 0.5, -s * 1.5, s * 0.72, s * 0.42);
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = Math.max(0.6, s * 0.05); ctx.strokeRect(s * 0.5, -s * 1.5, s * 0.72, s * 0.42);
+  // 상태 표시
+  if (st === 'battle') { // 교전: 붉은 교차 검 플래시
+    const pu = 0.6 + 0.4 * Math.sin(tm * 9);
+    ctx.globalAlpha = pu; ctx.strokeStyle = '#ff3b30'; ctx.lineWidth = Math.max(1.4, s * 0.16);
+    const u = s * 0.62;
+    ctx.beginPath();
+    ctx.moveTo(-u, -s * 1.7); ctx.lineTo(-u * 0.2, -s * 1.7 - u * 0.8); ctx.moveTo(-u * 0.2, -s * 1.7); ctx.lineTo(-u, -s * 1.7 - u * 0.8);
+    ctx.moveTo(-u * 0.72, -s * 1.7 - u * 0.28); ctx.lineTo(-u * 0.5, -s * 1.7 - u * 0.06); ctx.moveTo(-u * 0.5, -s * 1.7 - u * 0.74); ctx.lineTo(-u * 0.72, -s * 1.7 - u * 0.52);
+    ctx.stroke(); ctx.globalAlpha = 1;
+  } else if (st === 'siege') { // 포위: 주황 점선 링
+    ctx.strokeStyle = '#ff9f43'; ctx.lineWidth = Math.max(1.2, s * 0.12);
+    ctx.setLineDash([4, 3]); ctx.lineDashOffset = -tm * 14;
+    ctx.beginPath(); ctx.arc(0, 0, s * 1.35, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+  }
   ctx.restore();
 }
 function drawShip(ctx, x, y, ang, s, flag, sail, cargo = -1) {

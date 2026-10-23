@@ -1,0 +1,239 @@
+// 자율 부대 전투: 전쟁 중인 국가가 스스로 부대를 편성해 행군·회전·포위로 싸운다.
+// DOM/Canvas에 의존하지 않는 순수 로직 모듈. 시각화는 render.js가 S.armies를 읽어 처리한다.
+import { findLandPath, pathLen, captureProvince, addLog } from './sim.js';
+
+export const ARMY_GLOBAL_MAX = 70;      // 세계 전체 부대 상한
+export const ARMY_SPEED = 85;           // 1년에 이동하는 지도 픽셀
+export const BATTLE_RANGE = 18;         // 이 거리 안의 적 부대와 회전
+const SIEGE_RANGE = 14;                 // 목표 지방 앵커에 이 만큼 가까우면 포위
+const MIN_MEN = 80;                     // 이보다 적으면 소멸
+const RETREAT_FRAC = 0.42;              // 초기 병력의 이 비율 아래면 후퇴
+
+const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
+const shieldOf = (S, nat) => (S.buffs || []).some((b) => b.nat === nat && (b.kind || 'golden') === 'shield' && (b.until == null || b.until > S.year));
+
+// 국가당 부대 상한: 영토가 클수록 많이 유지
+export function armyCap(n) { return Math.min(5, 1 + Math.floor(n.pc / 3)); }
+
+// 전쟁 중인 두 나라인지
+export function atWar(S, a, b) {
+  for (const w of S.wars) if ((w.A.includes(a) && w.D.includes(b)) || (w.A.includes(b) && w.D.includes(a))) return w;
+  return null;
+}
+
+// 부대의 현재 전투력: 병력 × 기술 × 지형(고도) × 방패
+export function armyStrength(S, map, a, defenderProv = -1) {
+  const n = S.nations[a.nat]; if (!n) return 0;
+  let s = a.men * (1 + 0.12 * n.tech);
+  if (defenderProv >= 0) s *= 1 + 0.3 * map.provinces[defenderProv].e;
+  if (shieldOf(S, a.nat)) s *= 1.25;
+  return s;
+}
+
+// 픽셀 좌표의 지방 번호 (맵 밖이면 -1)
+export function provAt(map, x, y) {
+  const xi = Math.round(x), yi = Math.round(y);
+  if (xi < 0 || yi < 0 || xi >= map.W || yi >= map.H) return -1;
+  return map.prov[yi * map.W + xi];
+}
+
+// 공격 목표 선택: 전선(S.fr)에 맞닿은 적 지방 중 도시·인구 가중치가 큰 곳
+function pickTarget(S, map, n, w) {
+  const rng = S.rng, P = S.P; const foes = w.A.includes(n.id) ? w.D : w.A;
+  let best = -1, bs = 0;
+  for (const f of foes) {
+    const list = S.fr.get(n.id * 4096 + f) || S.fr.get(f * 4096 + n.id);
+    if (!list) continue;
+    for (let i = 0; i < Math.min(6, list.length); i++) {
+      const e = list[rng.int(list.length)];
+      const q = P.owner[e[0]] === n.id ? e[1] : e[0];
+      if (P.owner[q] === n.id || P.owner[q] < 0) continue;
+      const sc = 1 + P.city[q] * 1.6 + Math.min(2, P.pop[q] / 1200) + rng.next() * 0.8;
+      if (sc > bs) { bs = sc; best = q; }
+    }
+  }
+  return best;
+}
+
+// 새 부대 편성: 수도에서 징집, 병력만큼 수도 인구가 줄어든다
+function muster(S, map, n, w) {
+  const rng = S.rng, P = S.P;
+  const cap = n.cap; if (cap < 0 || P.owner[cap] !== n.id) return false;
+  const men = clamp(Math.round(n.pop * 0.004 * (0.85 + rng.next() * 0.3)), 150, 4500);
+  if (P.pop[cap] < men * 2.5) return false; // 수도가 감당 못 하면 징집하지 않음
+  const tgt = pickTarget(S, map, n, w);
+  if (tgt < 0) return false;
+  const A = map.provinces[cap], B = map.provinces[tgt];
+  const path = findLandPath(map, A.ax, A.ay, B.ax, B.ay);
+  if (!path) return false; // 육로가 없으면(바다 건너) 이번 라운드에서는 보내지 않음
+  P.pop[cap] -= men;
+  S.armies.push({
+    id: S.nextArmy++, nat: n.id, men, men0: men, x: A.ax, y: A.ay,
+    path, dlen: pathLen(path), prog: 0, tgt, home: cap, st: 'march', sg: 0, war: w.id,
+  });
+  return true;
+}
+
+// 후퇴 경로 설정: 가장 가까운 아군 지방으로
+function retreat(S, map, a) {
+  const P = S.P; let best = -1, bd = 1e18;
+  for (let q = 0; q < map.provinces.length; q++) {
+    if (P.owner[q] !== a.nat) continue;
+    const o = map.provinces[q]; const d = (o.ax - a.x) ** 2 + (o.ay - a.y) ** 2;
+    if (d < bd) { bd = d; best = q; }
+  }
+  if (best < 0) { a.men = 0; return; } // 갈 곳이 없으면 전멸 처리
+  const o = map.provinces[best];
+  const path = findLandPath(map, a.x, a.y, o.ax, o.ay);
+  a.st = 'retreat'; a.sg = 0; a.tgt = best;
+  if (path) { a.path = path; a.dlen = pathLen(path); a.prog = 0; } else { a.path = null; a.x = o.ax; a.y = o.ay; }
+}
+
+// 회전 한 해 진행: 양쪽이 피해를 입고, 한쪽이 무너지면 후퇴·소멸
+export function battleTick(S, map, A, B) {
+  const rng = S.rng;
+  const provA = provAt(map, A.x, A.y), provB = provAt(map, B.x, B.y);
+  const sA = armyStrength(S, map, A, provB) * rng.range(0.85, 1.15);
+  const sB = armyStrength(S, map, B, provA) * rng.range(0.85, 1.15);
+  const dA = Math.min(A.men, B.men * 0.26 * Math.sqrt(sB / Math.max(1, sA)) * rng.range(0.7, 1.3));
+  const dB = Math.min(B.men, A.men * 0.26 * Math.sqrt(sA / Math.max(1, sB)) * rng.range(0.7, 1.3));
+  A.men -= dA; B.men -= dB; S.deaths.war += dA + dB;
+  if (S.year % 2 === 0) { const p = provA >= 0 ? provA : provB; if (p >= 0) S.fxQueue.push([p, 'war']); }
+  for (const [U, sU, sF] of [[A, sA, sB], [B, sB, sA]]) {
+    if (U.men < MIN_MEN) U.men = 0;
+    else if (U.men < U.men0 * RETREAT_FRAC && U.st !== 'retreat') {
+      const foe = U === A ? B : A; const fn = S.nations[foe.nat], un = S.nations[U.nat];
+      if (un && fn && U.men0 + foe.men0 > 1500) addLog(S, `${fn.name}의 군대가 ${un.name}의 군대를 물리쳤습니다.`, 2, provAt(map, U.x, U.y), fn.id, un.id);
+      retreat(S, map, U);
+    }
+  }
+}
+
+// 포위 한 해 진행: 포위가 끝나면 지방을 점령
+function siegeTick(S, map, a, w) {
+  const rng = S.rng, P = S.P, q = a.tgt;
+  const ow = P.owner[q];
+  if (ow < 0 || ow === a.nat || !atWar(S, a.nat, ow)) { a.st = 'march'; a.tgt = -1; a.sg = 0; return; }
+  const o = map.provinces[q];
+  const need = (1 + 0.45 * o.e + P.city[q] * 0.35) * (shieldOf(S, ow) ? 1.6 : 1);
+  a.sg += a.men / (2600 * need);
+  const attr = a.men * 0.03; a.men -= attr; S.deaths.war += attr;
+  const drain = P.pop[q] * 0.012; P.pop[q] = Math.max(0, P.pop[q] - drain); S.deaths.war += drain;
+  if (S.year % 2 === 0) S.fxQueue.push([q, 'war']);
+  if (a.men < MIN_MEN) { a.men = 0; return; }
+  if (a.sg >= 1) {
+    a.sg = 0;
+    captureProvince(S, map, q, ow, a.nat, w, a.home);
+    a.st = 'march'; a.tgt = -1; // 다음 목표는 stepArmies가 고른다
+  }
+}
+
+// 전쟁이 끝나면 그 전쟁의 부대는 해산하고 병력 일부가 고향으로 돌아간다
+export function onWarEnd(S, map, w) {
+  const P = S.P;
+  for (const a of S.armies) {
+    if (a.war !== w.id) continue;
+    const n = S.nations[a.nat];
+    if (n && n.alive && n.cap >= 0 && P.owner[n.cap] === n.id) P.pop[n.cap] += Math.round(a.men * 0.7);
+    a.men = 0;
+  }
+  S.armies = S.armies.filter((a) => a.men > 0);
+}
+
+// 한 해 진행: 편성 → 이동 → 회전 → 포위 → 해산
+export function stepArmies(S, map) {
+  const rng = S.rng, P = S.P;
+  S.armies = S.armies || [];
+  // 1) 편성: 전쟁 중인 나라가 상한 안에서 새 부대를 띄운다 (전쟁 초기에 집중)
+  if (S.armies.length < ARMY_GLOBAL_MAX) {
+    for (const w of S.wars) {
+      for (const id of [...w.A, ...w.D]) {
+        const n = S.nations[id]; if (!n || !n.alive) continue;
+        const have = S.armies.reduce((c, a) => c + (a.nat === id ? 1 : 0), 0);
+        if (have >= armyCap(n)) continue;
+        const dur = S.year - w.start;
+        const p = dur < 2 ? 0.5 : 0.12; // 개전 직후 빠르게 편성, 이후 가끔 보충
+        if (rng.next() < p) muster(S, map, n, w);
+        if (S.armies.length >= ARMY_GLOBAL_MAX) break;
+      }
+    }
+  }
+  // 2) 부대별 행동
+  for (const a of S.armies) {
+    const n = S.nations[a.nat];
+    if (!n || !n.alive) { a.men = 0; continue; }
+    const w = S.wars.find((z) => z.id === a.war);
+    if (!w) { a.men = 0; continue; } // 전쟁이 끝난 부대는 onWarEnd에서 해산됨
+    if (a.st === 'battle') continue; // 회전은 아래에서 한 번에 처리
+    // 목표 재선정
+    if (a.tgt < 0 || (a.st === 'march' && (!a.path || a.prog >= a.dlen) && P.owner[a.tgt] === a.nat)) {
+      const t = pickTarget(S, map, n, w);
+      if (t < 0) { // 더 뺏을 곳이 없으면 귀환
+        retreat(S, map, a); a.st = 'garrison'; continue;
+      }
+      const B = map.provinces[t];
+      const path = findLandPath(map, a.x, a.y, B.ax, B.ay);
+      a.tgt = t; a.sg = 0;
+      if (path) { a.path = path; a.dlen = pathLen(path); a.prog = 0; a.st = 'march'; }
+      else { a.st = 'garrison'; a.path = null; } // 육로 불가: 주둔
+    }
+    if (a.st === 'march' || a.st === 'retreat') {
+      if (!a.path || a.dlen <= 0) { a.st = a.st === 'retreat' ? 'garrison' : a.st; a.tgt = a.st === 'garrison' ? a.tgt : -1; continue; }
+      const elev = map.provinces[provAt(map, a.x, a.y) >= 0 ? provAt(map, a.x, a.y) : a.home] || { e: 0 };
+      a.prog += ARMY_SPEED * (1 - 0.3 * Math.min(1, elev.e)) * (a.st === 'retreat' ? 1.25 : 1);
+      if (a.prog >= a.dlen) {
+        const last = a.path[a.path.length - 1]; a.x = last[0]; a.y = last[1];
+        if (a.st === 'retreat') { a.st = 'garrison'; a.path = null; }
+        else {
+          const q = a.tgt;
+          if (q >= 0 && P.owner[q] >= 0 && P.owner[q] !== a.nat && atWar(S, a.nat, P.owner[q])) a.st = 'siege';
+          else { a.tgt = -1; a.path = null; }
+        }
+      } else {
+        // 경로 위 현재 위치 갱신
+        let d = a.prog, x = a.path[0][0], y = a.path[0][1];
+        for (let i = 1; i < a.path.length; i++) {
+          const dx = a.path[i][0] - a.path[i - 1][0], dy = a.path[i][1] - a.path[i - 1][1], l = Math.hypot(dx, dy);
+          if (d <= l || i === a.path.length - 1) { const f = l ? Math.min(1, d / l) : 0; x = a.path[i - 1][0] + dx * f; y = a.path[i - 1][1] + dy * f; break; }
+          d -= l;
+        }
+        a.x = x; a.y = y;
+      }
+    } else if (a.st === 'siege') {
+      siegeTick(S, map, a, w);
+    } else if (a.st === 'garrison') {
+      // 주둔지에서 천천히 보충, 전황이 있으면 다시 출정
+      const cap = Math.min(4500, Math.max(150, Math.round(n.pop * 0.004)));
+      if (a.men < cap) {
+        const add = Math.min(cap - a.men, cap * 0.08);
+        const src = n.cap >= 0 && P.owner[n.cap] === n.id ? n.cap : -1;
+        if (src >= 0 && P.pop[src] > add * 3) { P.pop[src] -= add; a.men += add; a.men0 = Math.max(a.men0, a.men); }
+      }
+      if (a.men > 0.7 * Math.min(4500, Math.max(150, Math.round(n.pop * 0.004))) && rng.next() < 0.3) { a.tgt = -1; a.st = 'march'; }
+    }
+  }
+  // 3) 회전: 전쟁 중인 나라의 부대끼리 가까우면 교전
+  for (let i = 0; i < S.armies.length; i++) {
+    const A = S.armies[i]; if (A.men <= 0 || A.st === 'retreat') continue;
+    for (let j = i + 1; j < S.armies.length; j++) {
+      const B = S.armies[j]; if (B.men <= 0 || B.st === 'retreat') continue;
+      if (A.nat === B.nat || !atWar(S, A.nat, B.nat)) continue;
+      const d2 = (A.x - B.x) ** 2 + (A.y - B.y) ** 2;
+      if (d2 > BATTLE_RANGE * BATTLE_RANGE) continue;
+      if (A.st !== 'battle' && B.st !== 'battle' && A.men + B.men > 1600) {
+        const p = provAt(map, A.x, A.y);
+        addLog(S, `${S.nations[A.nat].name}와(과) ${S.nations[B.nat].name}의 군대가 ${S.provName[p] || '한 지방'}에서 격돌했습니다.`, 2, p >= 0 ? p : A.home, A.nat, B.nat);
+      }
+      A.st = 'battle'; B.st = 'battle'; A.sg = 0;
+      battleTick(S, map, A, B);
+    }
+  }
+  // 교전에서 벗어난 부대는 상태 복귀 (상대가 죽거나 멀어짐)
+  for (const a of S.armies) {
+    if (a.st !== 'battle') continue;
+    const engaged = S.armies.some((b) => b !== a && b.men > 0 && b.st === 'battle' && b.nat !== a.nat && atWar(S, a.nat, b.nat) && (a.x - b.x) ** 2 + (a.y - b.y) ** 2 <= BATTLE_RANGE * BATTLE_RANGE);
+    if (!engaged) { a.st = 'march'; }
+  }
+  // 4) 소멸한 부대 정리
+  S.armies = S.armies.filter((a) => a.men >= MIN_MEN);
+}

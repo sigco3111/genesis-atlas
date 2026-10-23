@@ -178,6 +178,7 @@ function loop(t) { if (!loop.n) console.log('loop1'); loop.n = (loop.n || 0) + 1
     if (n) needRefresh = true;
     if (S.auto && n) for (let i = 0; i < Math.min(n, 3); i++) sim.autoGod(S, map);
   }
+  R.showArmies = speed < 20; // 고속 진행에서는 부대 표시·애니메이션 생략
   for (const f of S.fxQueue.splice(0)) if (speed < 20) R.addEffect(f[0], f[1], f[2] !== undefined ? goodCss(f[2]) : undefined);
   if (S.log.length) { const lg = S.log; let i = lg.length - 1; while (i >= 0 && lg[i] !== loop.lastLog) i--; const fresh = i < 0 ? lg.slice(-1) : lg.slice(i + 1); loop.lastLog = lg[lg.length - 1];
     if (speed <= 100 && t - (loop.tt || 0) > 2500) { const big = fresh.filter((l) => l.i >= 3).pop(); if (big) { loop.tt = t; toast(yearStr(big.y) + ' · ' + big.t); } } }
@@ -616,7 +617,7 @@ function renderPanel(auto) {
     h = '<h3>신의 권능</h3><p>권능을 고르면 지도에 영향 범위와 예상 효과가 미리 보입니다. 한 번 고른 권능은 해제할 때까지 여러 지역에 계속 사용할 수 있고, 발동할 때마다 실제 변화를 요약해 보여 줍니다.</p>' + Object.entries(sim.POWERS).map(([k, v]) => `<button class="pw ${selPower === k ? 'on' : ''}" data-p="${k}">${v.name}<small>${v.desc}</small></button>`).join('');
     h += `<button class="pw ${S.auto ? 'on' : ''}" id="autoBtn">자동 신 위임: ${S.auto ? '켜짐' : '꺼짐'}<small>신이 알아서 균형을 맞춥니다.</small></button>`;
   } else {
-    h = '<h3>도움말</h3><p class="fine">드래그로 이동, 휠/핀치로 확대. 지역을 누르면 정보가 나옵니다. 위쪽 버튼으로 속도와 지도 모드를 바꾸고, 권능 탭에서 신의 힘을 쓰거나 자동 신 위임을 켜 보세요. 아무것도 하지 않아도 세계는 계속 흘러갑니다.</p><h3>설정</h3><button class="pw" id="bSave">지금 저장</button><button class="pw" id="bExp">파일로 내보내기</button><button class="pw" id="bImp">파일에서 불러오기</button><button class="pw" id="bNew">새 세계 시작</button><input type="file" id="fImp" class="hide" accept=".json">';
+    h = '<h3>도움말</h3><p class="fine">드래그로 이동, 휠/핀치로 확대. 지역을 누르면 정보가 나옵니다. 전쟁이 나면 나라가 스스로 부대를 편성해 행군하고 싸웁니다. 위쪽 버튼으로 속도와 지도 모드를 바꾸고, 권능 탭에서 신의 힘을 쓰거나 자동 신 위임을 켜 보세요. 아무것도 하지 않아도 세계는 계속 흘러갑니다.</p><h3>설정</h3><button class="pw" id="bSave">지금 저장</button><button class="pw" id="bExp">파일로 내보내기</button><button class="pw" id="bImp">파일에서 불러오기</button><button class="pw" id="bNew">새 세계 시작</button><input type="file" id="fImp" class="hide" accept=".json">';
     h += '<p class="fine">지도 데이터: Natural Earth (퍼블릭 도메인). 지구 국경은 근사이며 대체 역사입니다.</p>';
   }
   const sig = tab === 'god' ? 'god' + selPower + S.auto : tab + h.length + (tab === 'world' || tab === 'eco' || tab === 'sel' || tab === 'log' || tab === 'cmp' || tab === 'war' ? Math.floor(S.year / 5) : '');
