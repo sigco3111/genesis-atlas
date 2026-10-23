@@ -171,3 +171,12 @@ canvas#cmpSpark{width:100%;height:96px;background:#0b2036;border-radius:6px}
 #warview button{flex:none;background:#3a2f10;border:1px solid #ffd24a;color:#ffe9a8;border-radius:8px;padding:2px 8px}
 #warview button:hover{background:#5a4a18}
 @media(max-width:760px){#warview:not(.hide){top:44px;width:94vw;font-size:12px}}
+
+.eb{display:flex;align-items:center;gap:6px;margin-top:6px}.eb .en{width:62px;font-size:13px;display:flex;align-items:center;gap:5px}.eb .en i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.eb .bw{flex:1;height:9px;background:#10263b;border-radius:5px;overflow:hidden}.eb .bf{height:100%;border-radius:5px;opacity:.92}.eb b{width:42px;text-align:right;font-size:13px}
+b.bad,.bad{color:#ff8a7a}b.mid,.mid{color:#ffd27a}b.good,.good{color:#8fe3a2}
+.es{font-size:11px;color:#8aa3bd;margin:1px 0 0 68px}
+.chip2{display:inline-block;border:1px solid;border-radius:10px;padding:0 7px;font-size:12px;margin-left:3px}
+#reslegend{position:fixed;left:10px;bottom:14px;background:#06101ccc;border:1px solid #2c5078;border-radius:12px;padding:8px 12px;font-size:12px;display:flex;gap:10px;flex-wrap:wrap;max-width:min(92vw,520px);pointer-events:none;z-index:4;backdrop-filter:blur(4px)}
+#reslegend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+@media(max-width:700px){#reslegend{bottom:auto;top:84px;left:6px;font-size:11px;gap:6px;padding:5px 8px}}

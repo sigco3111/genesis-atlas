@@ -14,7 +14,7 @@ const find = () => {
   for (let p = 0; p < map.provinces.length; p++) {
     if (owned < 0 && P.owner[p] >= 0 && P.pop[p] > 100) owned = p;
     if (empty < 0 && P.owner[p] < 0 && P.pop[p] <= 5 && map.provinces[p].fert >= 0.05) empty = p;
-    if (city < 0 && P.city[p] >= 2) city = p;
+    if (city < 0 && P.city[p] >= 2 && P.owner[p] >= 0) city = p;
   }
 };
 find();

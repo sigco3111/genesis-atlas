@@ -4,6 +4,7 @@ import * as sim from './sim.js';
 import { CAP_AGE_STEPS, nextCapAge, capAgeLabel, trackedWarIds, warEvents } from './warwatch.js';
 import { capsBySide, warMapPoints, fitWarView } from './warhist.js';
 import { METRICS, seriesOf, chartMax, commonWindow, changeOf, changeDir, fmtChange } from './cmptrend.js';
+import { GOODS, NG, resOf, goodCss } from './econ.js';
 import { yearStr, numStr, ERA_NAMES } from './names.js';
 const $ = (id) => document.getElementById(id);
 const SAVE = 'genesis-atlas-save-v1';
@@ -13,7 +14,7 @@ try { autoWarPause = localStorage.getItem(WARPAUSE_PREF) === '1'; } catch (e) {}
 function readCapAge() { try { const raw = localStorage.getItem(CAPAGE_PREF); if (raw === null) return 3; const v = +raw; return CAP_AGE_STEPS.includes(v) ? v : 3; } catch (e) { return 3; } }
 let map = null, S = null, R = null, running = false, speed = 1, prevSpeed = 1, acc = 0, last = 0, tab = 'world', lastRefresh = 0, needRefresh = true, earthCache = null;
 const SPEEDS = [[0, '⏸'], [0.5, '0.5'], [1, '1'], [3, '3'], [10, '10'], [100, '100']];
-const MODES = [['political', '정치'], ['culture', '문화'], ['religion', '종교'], ['pop', '인구'], ['tech', '기술'], ['unrest', '불안'], ['terrain', '지형']];
+const MODES = [['political', '정치'], ['culture', '문화'], ['religion', '종교'], ['pop', '인구'], ['tech', '기술'], ['unrest', '불안'], ['res', '자원'], ['terrain', '지형']];
 
 function toast(t) { const e = $('toast'); e.textContent = t; e.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => e.classList.remove('show'), 2400); }
 async function loadImg(url) {
@@ -72,11 +73,11 @@ $('cont').onclick = async () => {
     boot();
   } catch (e) { $('loadmsg').textContent = '저장 데이터를 열 수 없어 폐기합니다: ' + e.message; localStorage.removeItem(SAVE); $('cont').classList.add('hide'); }
 };
-function boot() { console.log('boot', S.mode, S.year);
+function boot() { { const lg = $('reslegend'); if (lg) lg.innerHTML = '<b>자원 지도</b>' + GOODS.slice(1).map((g, i) => `<span><i style="background:${goodCss(i + 1)}"></i>${g.name}</span>`).join('') + '<span>◐ 큰 메달 = 풍부한 매장</span>'; } console.log('boot', S.mode, S.year);
   $('start').classList.add('hide');
   R = new Renderer($('map'), map); if (!boot.done) { boot.done = true; bindInput(); window.addEventListener('resize', () => { R.resize(); needRefresh = true; }); requestAnimationFrame(loop); }
   R.capAge = readCapAge(); prevTrkWars = trackedWarIds(S);
-  R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = 'political'; R.sel = -1; selPower = null; histWar = null; { const wv0 = $('warview'); if (wv0) wv0.classList.add('hide'); } pwCount = 0; pwPending = null; updateArmChip(); R.trackId = S.track ? S.track.id : -1; cmpA = cmpB = -1; speed = window.__speed ?? 1; running = true; needRefresh = true; buildBars(); renderPanel(); renderTrack();
+  R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = window.__view || 'political'; R.sel = -1; selPower = null; histWar = null; { const wv0 = $('warview'); if (wv0) wv0.classList.add('hide'); } pwCount = 0; pwPending = null; updateArmChip(); R.trackId = S.track ? S.track.id : -1; cmpA = cmpB = -1; speed = window.__speed ?? 1; running = true; needRefresh = true; buildBars(); renderPanel(); renderTrack();
   let pref = null; try { pref = localStorage.getItem(PANEL_PREF); } catch (e) {}
   setPanelOpen(pref === null ? !isMobileLayout() : pref === '1', false);
   toast('휠·드래그로 이동, 지역을 눌러 살펴보세요');
@@ -144,7 +145,8 @@ $('swar').onclick = () => {
   const w = S.wars[warFocusIdx++ % S.wars.length];
   if (focusWar(w)) toast('⚔ ' + (S.nations[w.A[0]] || {}).name + ' 대 ' + (S.nations[w.D[0]] || {}).name + ' 전선');
 };
-function markBars() { $('rate').textContent = speed ? (speed >= 1 ? '· 1초에 ' + speed + '년' : '· ' + 1 / speed + '초에 1년') : '· 일시정지'; for (const b of $('speed').children) if (b.dataset.v) b.classList.toggle('on', +b.dataset.v === speed); for (const b of $('modes').children) if (b.dataset.m) b.classList.toggle('on', b.dataset.m === R.mode); }
+function markBars() { { const lg = $('reslegend'); if (lg && R) lg.classList.toggle('hide', R.mode !== 'res'); }
+  $('rate').textContent = speed ? (speed >= 1 ? '· 1초에 ' + speed + '년' : '· ' + 1 / speed + '초에 1년') : '· 일시정지'; for (const b of $('speed').children) if (b.dataset.v) b.classList.toggle('on', +b.dataset.v === speed); for (const b of $('modes').children) if (b.dataset.m) b.classList.toggle('on', b.dataset.m === R.mode); }
 // ---------- 패널 접기/펼치기 ----------
 const PANEL_PREF = 'genesis-atlas-panel';
 const isMobileLayout = () => window.innerWidth <= 760;
@@ -176,7 +178,7 @@ function loop(t) { if (!loop.n) console.log('loop1'); loop.n = (loop.n || 0) + 1
     if (n) needRefresh = true;
     if (S.auto && n) for (let i = 0; i < Math.min(n, 3); i++) sim.autoGod(S, map);
   }
-  for (const f of S.fxQueue.splice(0)) if (speed < 20) R.addEffect(f[0], f[1]);
+  for (const f of S.fxQueue.splice(0)) if (speed < 20) R.addEffect(f[0], f[1], f[2] !== undefined ? goodCss(f[2]) : undefined);
   if (S.log.length) { const lg = S.log; let i = lg.length - 1; while (i >= 0 && lg[i] !== loop.lastLog) i--; const fresh = i < 0 ? lg.slice(-1) : lg.slice(i + 1); loop.lastLog = lg[lg.length - 1];
     if (speed <= 100 && t - (loop.tt || 0) > 2500) { const big = fresh.filter((l) => l.i >= 3).pop(); if (big) { loop.tt = t; toast(yearStr(big.y) + ' · ' + big.t); } } }
   if (S && S.track) {
@@ -390,13 +392,45 @@ function select(p) {
 }
 
 // ---------- 패널 ----------
-const TABS = [['world', '세계'], ['sel', '선택'], ['cmp', '비교'], ['log', '연대기'], ['war', '전쟁'], ['god', '권능'], ['set', '설정']];
+const TABS = [['world', '세계'], ['eco', '경제'], ['sel', '선택'], ['cmp', '비교'], ['log', '연대기'], ['war', '전쟁'], ['god', '권능'], ['set', '설정']];
 let panelSig = '';
 let logNat = null; // 연대기 탭 국가 필터 (null = 전체)
 let cmpA = -1, cmpB = -1; // 비교 탭의 두 나라 슬롯
 let cmpMetric = 'pop'; // 추이 차트 지표 (pop/pc/stab)
 try { const m = localStorage.getItem('genesis-atlas-cmpmetric'); if (METRICS.some(([k]) => k === m)) cmpMetric = m; } catch (e) {}
 function goTo(p) { if (p == null || p < 0 || !map.provinces[p]) return; R.sel = p; R.paintHL(); R.focus(p, 4); needRefresh = true; if (isMobileLayout()) setPanelOpen(false); }
+const pct = (v) => Math.round(v * 100) + '%';
+function bar(g, e) {
+  const sat = e.sat[g], d = e.dem[g]; if (d <= 0 && e.prod[g] <= 0) return '';
+  const col = goodCss(g); const pr = e.prod[g], im = e.imp[g] * 0.02;
+  const cls = sat < 0.6 ? 'bad' : sat < 0.9 ? 'mid' : 'good';
+  return `<div class="eb"><span class="en"><i style="background:${col}"></i>${GOODS[g].name}</span><div class="bw"><div class="bf ${cls}" style="width:${Math.round(sat * 100)}%;background:${col}"></div></div><b class="${cls}">${pct(sat)}</b></div><div class="es">생산 ${numStr(pr)} · 수요 ${numStr(d)} · 비축 ${numStr(e.stock[g])}${e.imp[g] > 0.5 ? ' · 수입 ▲' : ''}${e.exp[g] > 0.5 ? ' · 수출 ▼' : ''}</div>`;
+}
+function ecoNation(n) {
+  const e = n.eco; if (!e) return '';
+  let h = `<h3>${n.name}의 경제</h3>`;
+  for (let g = 0; g < NG; g++) h += bar(g, e);
+  const lift = e.sat.map((v, g) => [g, v - e.base[g]]).filter(([g, d]) => d > 0.03 && e.dem[g] > 0).map(([g, d]) => `${GOODS[g].name} +${Math.round(d * 100)}%p`);
+  h += kv('국고', (e.wealth >= 0 ? '' : '-') + numStr(Math.abs(e.wealth))) + kv('곡물 효과', '성장 ×' + e.fm.toFixed(2)) + kv('기술 효과', '진보 ×' + e.tm.toFixed(2)) + kv('군사 효과', '전력 ×' + e.mm.toFixed(2));
+  if (lift.length) h += `<div class="es good">교역 덕분에 자급률 ${lift.join(', ')}</div>`;
+  const pt = Object.entries(e.partners || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).filter(([id]) => S.nations[+id]);
+  if (pt.length) h += kv('주요 교역국', pt.map(([id]) => `<a href="#" data-n="${id}">${S.nations[+id].name}</a>`).join(', '));
+  return h;
+}
+function ecoHtml() {
+  const T = S.trade || { deliv: [], value: 0, voyages: 0 }; const al = S.nations.filter((n) => n.alive && n.eco);
+  let h = '<h3>세계 교역</h3>' + kv('누적 항해 화물', numStr(T.voyages) + '회') + kv('누적 교역액', numStr(T.value));
+  const loaded = (S.ships || []).filter((s) => s.cargo).length; h += kv('화물 실은 배', loaded + ' / ' + (S.ships || []).length);
+  h += '<h3>운송된 물자 (누적)</h3>';
+  const mx = Math.max(1, ...GOODS.map((_, g) => T.deliv[g] || 0));
+  for (let g = 0; g < NG; g++) h += `<div class="eb"><span class="en"><i style="background:${goodCss(g)}"></i>${GOODS[g].name}</span><div class="bw"><div class="bf" style="width:${Math.round((T.deliv[g] || 0) / mx * 100)}%;background:${goodCss(g)}"></div></div><b>${numStr(T.deliv[g] || 0)}</b></div>`;
+  const rich = al.slice().sort((a, b) => b.eco.wealth - a.eco.wealth).slice(0, 5);
+  h += '<h3>국고 상위</h3>' + rich.map((n) => `<div class="kv"><span><i style="color:rgb(${n.rgb})">■</i> <a href="#" data-n="${n.id}">${n.name}</a></span><b>${numStr(n.eco.wealth)}</b></div>`).join('');
+  const hungry = al.filter((n) => n.pc >= 2 && n.eco.sat[0] < 0.7).sort((a, b) => a.eco.sat[0] - b.eco.sat[0]).slice(0, 5);
+  if (hungry.length) h += '<h3>곡물이 모자란 나라</h3>' + hungry.map((n) => `<div class="kv"><span><i style="color:rgb(${n.rgb})">■</i> <a href="#" data-n="${n.id}">${n.name}</a></span><b class="bad">${pct(n.eco.sat[0])}</b></div>`).join('');
+  h += '<p class="fine">지방마다 목재·철·향신료·금이 묻혀 있고(지도 위 \'자원\' 모드), 항구 도시국가의 무역선이 남는 물자를 실어 모자란 나라로 나릅니다. 도착한 화물이 곡물(성장)·목재/철(기술·군사)·향신료/금(국고·안정도)에 반영됩니다. 이번 판은 해상 운송만 구현했습니다.</p>';
+  return h;
+}
 function kv(k, v) { return `<div class="kv"><span>${k}</span><b>${v}</b></div>`; }
 // ---------- 국가 비교 ----------
 function addToCompare(id) {
@@ -447,11 +481,15 @@ function renderPanel(auto) {
     h += '<h3>세계 현황</h3>' + kv('시대', ERA_NAMES[Math.min(9, Math.floor(st.maxT))]) + kv('총 인구', numStr(st.world)) + kv('살아있는 국가', st.alive) + kv('진행 중인 전쟁', S.wars.length) + kv('문화 / 종교', S.cultures.length + ' / ' + S.religions.length);
     h += '<h3>강대국</h3>' + S.nations.filter((n) => n.alive).sort((a, b) => b.pop - a.pop).slice(0, 10).map((n) => `<div class="kv"><span><i style="color:rgb(${n.rgb})">■</i> <a href="#" data-n="${n.id}">${n.name}</a> <a href="#" data-w="${n.id}" title="이 국가 추적">${S.track && S.track.id === n.id ? '★' : '☆'}</a></span><b>${numStr(n.pop)}</b></div>`).join('');
     h += '<h3>인구 추이</h3><canvas class="spark" id="spark" width="300" height="60"></canvas>';
+  } else if (tab === 'eco') {
+    h += ecoHtml();
   } else if (tab === 'sel') {
     const p = R.sel; if (p < 0) h = '<p>지도에서 지역을 눌러 보세요.</p>'; else {
       const o = map.provinces[p], ow = S.P.owner[p]; const n = ow >= 0 ? S.nations[ow] : null;
       h += `<h3>${S.provName[p] || '무인 지대'}</h3>` + kv('인구', numStr(S.P.pop[p])) + kv('기술', S.P.tech[p].toFixed(2)) + kv('불안', Math.round(S.P.unrest[p] * 100) + '%') + kv('도시', S.cityName[p] || '-') + kv('문화', S.P.cult[p] >= 0 ? S.cultures[S.P.cult[p]].name : '-') + kv('신앙', S.P.rel[p] >= 0 ? S.religions[S.P.rel[p]].name : '-');
       if (n) h += `<h3>${n.name}</h3>` + kv('정체', n.gov) + kv('지도자', n.lead.name + ' (' + sim.traitText(n.lead) + ')') + kv('인구', numStr(n.pop)) + kv('지방', n.pc) + kv('안정도', Math.round(n.stab * 100) + '%') + kv('건국', yearStr(n.born)) + kv('전적', n.wins + '승 ' + n.losses + '패');
+      { const rr = resOf(map); const rs = []; for (let g = 1; g < NG; g++) if (rr[p * NG + g] > 0.2) rs.push(`<span class="chip2" style="border-color:${goodCss(g)};color:${goodCss(g)}">${GOODS[g].name} ${Math.round(rr[p * NG + g] * 100)}</span>`); h += kv('지력', Math.round(o.fert * 100)) + `<div class="kv"><span>매장 자원</span><b>${rs.join(' ') || '-'}</b></div>`; }
+      if (n && n.alive) h += ecoNation(n);
       if (n && n.alive) h += `<button class="pw" data-trk="${n.id}">${S.track && S.track.id === n.id ? '★ 추적 해제' : '☆ 이 국가 추적'}<small>인구·영토·전쟁 변화를 화면 왼쪽 위 카드로 계속 보여 줍니다.</small></button>`;
       if (n) h += `<button class="pw" data-cmp="${n.id}">⇄ 이 국가 비교하기<small>다른 나라와 인구·영토·안정도·전적·성장 추이를 나란히 비교합니다.</small></button>`;
       if (n) {
@@ -580,7 +618,7 @@ function renderPanel(auto) {
     h = '<h3>도움말</h3><p class="fine">드래그로 이동, 휠/핀치로 확대. 지역을 누르면 정보가 나옵니다. 위쪽 버튼으로 속도와 지도 모드를 바꾸고, 권능 탭에서 신의 힘을 쓰거나 자동 신 위임을 켜 보세요. 아무것도 하지 않아도 세계는 계속 흘러갑니다.</p><h3>설정</h3><button class="pw" id="bSave">지금 저장</button><button class="pw" id="bExp">파일로 내보내기</button><button class="pw" id="bImp">파일에서 불러오기</button><button class="pw" id="bNew">새 세계 시작</button><input type="file" id="fImp" class="hide" accept=".json">';
     h += '<p class="fine">지도 데이터: Natural Earth (퍼블릭 도메인). 지구 국경은 근사이며 대체 역사입니다.</p>';
   }
-  const sig = tab === 'god' ? 'god' + selPower + S.auto : tab + h.length + (tab === 'world' || tab === 'log' || tab === 'cmp' || tab === 'war' ? Math.floor(S.year / 5) : '');
+  const sig = tab === 'god' ? 'god' + selPower + S.auto : tab + h.length + (tab === 'world' || tab === 'eco' || tab === 'sel' || tab === 'log' || tab === 'cmp' || tab === 'war' ? Math.floor(S.year / 5) : '');
   if (auto && sig === panelSig) return;
   panelSig = sig; body.innerHTML = h;
   for (const a of body.querySelectorAll('[data-n]')) a.onclick = (e) => { e.preventDefault(); const n = S.nations[+a.dataset.n]; R.sel = n.cap; R.paintHL(); R.focus(n.cap, 3); tab = 'sel'; renderPanel(); };
@@ -688,4 +726,4 @@ function renderTrack() {
   }
   layoutFloaters();
 }
-{ const q = new URLSearchParams(location.search); if (q.has('map')) $('selMap').value = q.get('map'); if (q.has('mode')) $('selMode').value = q.get('mode'); if (q.has('auto')) { $('go').click(); window.__skip = +q.get('auto') || 0; if (q.has('speed')) window.__speed = +q.get('speed'); } }
+{ const q = new URLSearchParams(location.search); if (q.has('map')) $('selMap').value = q.get('map'); if (q.has('mode')) $('selMode').value = q.get('mode'); if (q.has('view')) window.__view = q.get('view'); if (q.has('tab')) tab = q.get('tab'); if (q.has('auto')) { $('go').click(); window.__skip = +q.get('auto') || 0; if (q.has('speed')) window.__speed = +q.get('speed'); } }

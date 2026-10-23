@@ -3,6 +3,7 @@ import { W, H, BIOMES } from './world.js';
 import { planLabels, nationBudget, cityBudget } from './labels.js';
 import { visibleCaps, capAlpha } from './warwatch.js';
 import { pathPos } from './sim.js';
+import { GOODS, NG, resOf, mainRes, goodCss } from './econ.js';
 const S2 = 2, TW = W * S2, TH = H * S2;
 const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 const BCOL = [null, '#e8eef1', '#b4bfad', '#5b7d5a', '#6c9856', '#a8b45e', '#d6c086', '#b8b061', '#3e7d48', '#8a8377', '#f3f5f7', '#b2ad73'].map((c) => c && hex(c));
@@ -129,6 +130,7 @@ export class Renderer {
       else if (mode === 'religion') { const r = S.P.rel[p]; if (r >= 0 && S.P.pop[p] > 1) { const k = S.religions[r].rgb; c = rgba(k[0], k[1], k[2], 185); } }
       else if (mode === 'pop') { const o = map.provinces[p]; const dn = S.P.pop[p] / Math.max(1, o.a); const t = Math.max(0, Math.min(1, (Math.log10(1 + dn * 40) - this.sc.pl) / Math.max(0.3, this.sc.ph - this.sc.pl))); if (S.P.pop[p] > 1) c = ramp(t, [[40, 40, 80], [200, 80, 60], [255, 230, 120]], 200); }
       else if (mode === 'tech') { if (S.P.pop[p] > 1) { const t = Math.max(0, Math.min(1, (S.P.tech[p] - this.sc.tl) / Math.max(0.4, this.sc.th - this.sc.tl))); c = ramp(t, [[60, 60, 100], [60, 160, 200], [240, 220, 100], [255, 120, 80]], 200); } }
+      else if (mode === 'res') { if (map.land && map.provinces[p]) { const g = mainRes(map, p); const rr = resOf(map); if (g > 0) { const k = GOODS[g].rgb, v = Math.min(1, rr[p * NG + g] / 1.1); c = rgba(k[0], k[1], k[2], Math.round(55 + v * 85)); } else if (ow >= 0 || S.P.pop[p] > 1) c = rgba(14, 30, 48, 90); } }
       else if (mode === 'unrest') { if (ow >= 0) { c = ramp(Math.min(1, S.P.unrest[p]), [[50, 130, 70], [230, 200, 70], [220, 50, 50]], 190); } }
       col[p] = c;
     }
@@ -137,7 +139,7 @@ export class Renderer {
   computeLabels(S) {
     const out = []; const map = this.map;
     const mode = this.mode;
-    if (mode === 'political' || mode === 'terrain' || mode === 'pop' || mode === 'tech' || mode === 'unrest') {
+    if (mode === 'political' || mode === 'terrain' || mode === 'pop' || mode === 'tech' || mode === 'unrest' || mode === 'res') {
       for (const n of S.nations) {
         if (!n.alive || !n.pc) continue;
         out.push({ t: (S.track && S.track.id === n.id ? '\u2605 ' : '') + n.name, x: n.lx, y: n.ly, s: Math.sqrt(n.pc), n: n.id, big: n.pc });
@@ -235,9 +237,24 @@ export class Renderer {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.drawOverlayVec(ctx, S);
   }
+  // 자원 지도: 지방마다 주요 자원 메달 (크기 = 매장량). 확대할수록 작은 매장지도 보인다.
+  drawResGlyphs(ctx, S) {
+    const map = this.map, z = this.cam.z, R = resOf(map); const prv = map.provinces; const N = prv.length;
+    const thr = z < 1.4 ? 0.95 : z < 2.4 ? 0.6 : 0.3; const base = Math.max(5, Math.min(15, 3 + z * 2.4));
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (let p = 0; p < N; p++) {
+      const o = prv[p]; const [x, y] = this.w2s(o.ax, o.ay); if (x < -20 || y < -20 || x > this.cssW + 20 || y > this.cssH + 20) continue;
+      for (let g = 1, drawn = 0; g < NG; g++) {
+        const r = R[p * NG + g]; if (r < thr) continue;
+        const s = base * (0.62 + 0.38 * Math.min(1.4, r)); const dx = drawn ? s * 1.9 * drawn : 0; drawn++; if (drawn > 2) break;
+        drawGlyph(ctx, x + dx, y, s, g, GOODS[g].rgb, this.time + p);
+      }
+    }
+  }
   w2s(x, y) { const c = this.cam; return [(x - c.x) * c.z + this.cssW / 2, (y - c.y) * c.z + this.cssH / 2]; }
   drawOverlayVec(ctx, S) {
     const c = this.cam, z = c.z; const map = this.map;
+    if (this.mode === 'res') this.drawResGlyphs(ctx, S);
     // 교역로 (육상: 금색 점선, 해상: 하늘색 점선) + 무역선
     if (this.showTrade && S.routes) {
       ctx.lineWidth = Math.max(1, z * 0.35); ctx.setLineDash([z * 1.2, z * 1.6]); ctx.lineDashOffset = -this.time * 12;
@@ -268,8 +285,9 @@ export class Renderer {
           if (px < -20 || py < -20 || px > this.cssW + 20 || py > this.cssH + 20) continue;
           const nn = S.nations[sh.nat];
           ctx.globalAlpha = Math.min(1, 0.3 + 3 * Math.min(sh.t, 1 - sh.t));
-          drawShip(ctx, px, py, ang, ss, nn && nn.alive ? `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})` : null, '#f2ead8');
+          drawShip(ctx, px, py, ang, ss, nn && nn.alive ? `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})` : null, '#f2ead8', sh.cargo ? sh.cargo.g : -1);
           ctx.globalAlpha = 1;
+          if (sh.cargo && z >= 3.5) { ctx.font = '600 10px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(5,15,28,.85)'; const tx = GOODS[sh.cargo.g].name + ' ' + Math.round(sh.cargo.amt); ctx.strokeText(tx, px, py + ss * 1.9); ctx.fillStyle = goodCss(sh.cargo.g); ctx.fillText(tx, px, py + ss * 1.9); }
         }
       }
     }
@@ -454,7 +472,21 @@ export class Renderer {
   }
 }
 // 돛단배: 선체 + 돛 + 국가색 깃발. ang은 진행 방향(라디안).
-function drawShip(ctx, x, y, ang, s, flag, sail) {
+function drawGlyph(ctx, x, y, s, g, rgb, tm) {
+  const col = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+  ctx.save(); ctx.translate(x, y);
+  const gl = ctx.createRadialGradient(0, 0, s * 0.2, 0, 0, s * 1.5); gl.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},.38)`); gl.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
+  ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(0, 0, s * 1.5, 0, 7); ctx.fill();
+  ctx.fillStyle = 'rgba(8,20,34,.84)'; ctx.strokeStyle = col; ctx.lineWidth = Math.max(1.2, s * 0.14);
+  ctx.beginPath(); ctx.arc(0, 0, s * 0.82, 0, 7); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = col; ctx.strokeStyle = col; const u = s * 0.5;
+  if (g === 1) { ctx.beginPath(); ctx.moveTo(0, -u * 1.05); ctx.lineTo(u * 0.8, -u * 0.05); ctx.lineTo(-u * 0.8, -u * 0.05); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(0, -u * 0.5); ctx.lineTo(u * 1.0, u * 0.65); ctx.lineTo(-u * 1.0, u * 0.65); ctx.closePath(); ctx.fill(); ctx.fillRect(-u * 0.12, u * 0.6, u * 0.24, u * 0.45); }
+  else if (g === 2) { ctx.beginPath(); ctx.moveTo(-u * 0.5, -u * 0.75); ctx.lineTo(u * 0.5, -u * 0.75); ctx.lineTo(u * 1.0, u * 0.1); ctx.lineTo(-u * 1.0, u * 0.1); ctx.closePath(); ctx.fill(); ctx.fillRect(-u * 1.05, u * 0.22, u * 2.1, u * 0.7); ctx.fillStyle = 'rgba(8,20,34,.7)'; ctx.fillRect(-u * 0.55, -u * 0.5, u * 0.5, u * 0.18); }
+  else if (g === 3) { ctx.beginPath(); ctx.moveTo(0, -u * 1.05); ctx.quadraticCurveTo(u * 1.0, -u * 0.1, 0, u * 0.95); ctx.quadraticCurveTo(-u * 1.0, -u * 0.1, 0, -u * 1.05); ctx.fill(); ctx.strokeStyle = 'rgba(8,20,34,.85)'; ctx.lineWidth = Math.max(1, s * 0.1); ctx.beginPath(); ctx.moveTo(0, -u * 0.6); ctx.lineTo(0, u * 0.7); ctx.stroke(); }
+  else if (g === 4) { ctx.beginPath(); ctx.moveTo(0, -u * 1.0); ctx.lineTo(u * 0.95, 0); ctx.lineTo(0, u * 1.0); ctx.lineTo(-u * 0.95, 0); ctx.closePath(); ctx.fill(); const tw = 0.5 + 0.5 * Math.sin(tm * 3); ctx.globalAlpha = 0.5 + 0.5 * tw; ctx.fillStyle = '#fff'; ctx.fillRect(-u * 0.12, -u * 0.55, u * 0.24, u * 0.24); }
+  ctx.restore();
+}
+function drawShip(ctx, x, y, ang, s, flag, sail, cargo = -1) {
   ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
   // 물살 자국
   ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = Math.max(1, s * 0.14); ctx.lineCap = 'round';
@@ -468,6 +500,8 @@ function drawShip(ctx, x, y, ang, s, flag, sail) {
   ctx.beginPath(); ctx.moveTo(-s * 0.08, -s * 0.1); ctx.lineTo(-s * 0.08, -s * 1.1); ctx.lineTo(-s * 0.62, -s * 0.14); ctx.closePath(); ctx.fill();
   // 깃발
   if (flag) { ctx.fillStyle = flag; ctx.fillRect(s * 0.05, -s * 1.62, s * 0.55, s * 0.3); }
+  // 화물: 갑판 위 자원색 상자
+  if (cargo >= 0) { const c = GOODS[cargo].rgb; ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`; ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = Math.max(0.6, s * 0.06); for (let i = 0; i < 3; i++) { const bx = -s * 0.7 + i * s * 0.42, by = -s * 0.2 - (i === 1 ? s * 0.22 : 0); ctx.fillRect(bx, by, s * 0.34, s * 0.3); ctx.strokeRect(bx, by, s * 0.34, s * 0.3); } }
   ctx.restore();
 }
 // 권능·재해 발동 효과: 종류별로 구분되는 모양으로 그린다.
@@ -716,6 +750,15 @@ function drawFx(ctx, e, x, y, z, time) {
         ctx.beginPath(); ctx.moveTo(x - wdt, cy + 3 * u); ctx.lineTo(x, cy - 3 * u); ctx.lineTo(x + wdt, cy + 3 * u); ctx.stroke();
       }
       break; }
+    case 'trade': { // 하역: 자원색 상자가 뭍으로 오르고 금화가 튄다
+      ring((4 + k * 24) * u, 2.2 * a + 0.5, e.color);
+      for (let n = 0; n < 8; n++) {
+        const sx = x + (rnd(n) - 0.5) * 30 * u, sy = y - ((k * 1.3 + rnd(n + 9)) % 1) * 34 * u;
+        ctx.globalAlpha = a * (0.55 + rnd(n + 3) * 0.45); ctx.fillStyle = e.color || st.c; const q = (2 + rnd(n + 14) * 2) * u; ctx.fillRect(sx - q / 2, sy - q / 2, q, q);
+      }
+      for (let n = 0; n < 4; n++) { const ang = rnd(n + 40) * 6.283, rr = (6 + k * 20) * u; ctx.globalAlpha = a; ctx.fillStyle = '#ffd84a'; ctx.beginPath(); ctx.arc(x + Math.cos(ang) * rr, y + Math.sin(ang) * rr * 0.7 - k * 8 * u, 1.6 * u, 0, 7); ctx.fill(); }
+      break;
+    }
     case 'settle': { // 정착: 파도를 밀고 올라오는 청록 불빛 + 링
       ring((5 + k * 30) * u, 2.5 * a + 0.5); ring((2 + k * 16) * u, 1.5);
       ctx.fillStyle = st.c;
