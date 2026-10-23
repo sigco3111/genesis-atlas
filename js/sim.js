@@ -22,7 +22,7 @@ export const POWERS = {
   peace: { name: '평화의 신탁', desc: '해당 국가가 치르는 모든 전쟁을 끝냅니다.' },
   war: { name: '전쟁의 불씨', desc: '이웃과의 관계를 악화시켜 전쟁을 부추깁니다.' },
   warshield: { name: '수호의 방패', desc: '전쟁 중인 국가를 보호합니다: 전쟁이 끝날 때까지 영토 방어가 강해지고 피로가 천천히 쌓입니다.' },
-  warheal: { name: '전장의 치유', desc: '전쟁으로 상처 입은 자국 지방을 돌봅니다: 불안이 가라앉고 인구가 조금 회복됩니다.' },
+  warheal: { name: '전장의 치유', desc: '최근 전쟁에서 점령·탈환된 자국 지방을 돌봅니다: 불안이 가라앉고 인구가 조금 회복됩니다.' },
   mobilize: { name: '총동원령', desc: '전쟁 중인 국가의 피로를 즉시 씻어 내고 10년간 군사력을 끌어올립니다.' },
 };
 
@@ -551,6 +551,14 @@ export function disaster(S, map, kind, p) {
 
 // ---------- 신의 권능 ----------
 // 권능 대상 범위 미리보기: 유효성, 영향 지방 목록, 예상 효과 문구를 돌려준다 (DOM 없음).
+function warWounds(S, ow) {
+  const P = S.P, out = [];
+  if (!S.recentCaps || !S.recentCaps.length) return out;
+  const cut = S.year - 40; const hit = new Set();
+  for (const c of S.recentCaps) if (c.y >= cut) hit.add(c.q);
+  for (const q of hit) if (P.owner[q] === ow && P.unrest[q] >= 0.15) out.push(q);
+  return out;
+}
 function migrateTargets(S, map, p) {
   const P = S.P, o = map.provinces[p], out = [];
   const fits = (q) => { const Kq = capacity(S, map, q) || 1; return P.pop[q] < Kq * 0.35 && map.provinces[q].fert > 0.04; };
@@ -615,9 +623,9 @@ export function powerArea(S, map, type, p) {
     }
     case 'warheal': {
       if (ow < 0) return noNation;
-      const hurt = []; for (let q = 0; q < P.owner.length; q++) if (P.owner[q] === ow && P.unrest[q] >= 0.3) hurt.push(q);
-      if (!hurt.length) return { ok: false, msg: '전쟁으로 상처 입은 지방이 없습니다', provs: nationProvs(ow), nation: ow };
-      return { ok: true, provs: hurt, nation: ow, shape: 'wide', expect: '전쟁 상처 ' + hurt.length + '곳: 불안 대폭 감소 · 인구 조금 회복' };
+      const hurt = warWounds(S, ow);
+      if (!hurt.length) return { ok: false, msg: '최근 전쟁으로 점령·탈환된 자국 지방이 없습니다', provs: nationProvs(ow), nation: ow };
+      return { ok: true, provs: hurt, nation: ow, shape: 'wide', expect: '최근 점령·탈환지 ' + hurt.length + '곳: 불안 대폭 감소 · 인구 조금 회복' };
     }
     case 'mobilize': {
       if (ow < 0) return noNation;
@@ -684,11 +692,12 @@ export function applyPower(S, map, type, p) {
       addLog(S, `${n.name}에 수호의 방패가 내려왔습니다. 전쟁이 끝날 때까지 영토가 굳게 지켜집니다.`, 2, p, ow); break; }
     case 'warheal': {
       if (needNation()) break;
-      const n = S.nations[ow]; const hurt = [];
-      for (let q = 0; q < P.owner.length; q++) if (P.owner[q] === ow && P.unrest[q] >= 0.3) hurt.push(q);
-      if (!hurt.length) { ok = false; msg = '전쟁으로 상처 입은 지방이 없습니다'; break; }
+      const n = S.nations[ow]; const hurt = warWounds(S, ow);
+      if (!hurt.length) { ok = false; msg = '최근 전쟁으로 점령·탈환된 자국 지방이 없습니다'; break; }
+      const hurtSet = new Set(hurt);
       for (const q of hurt) { P.unrest[q] *= 0.35; P.pop[q] *= 1.06; }
       n.stab = Math.min(1, n.stab + 0.03);
+      S.recentCaps = S.recentCaps.filter((c) => !hurtSet.has(c.q)); // 치유는 기록된 전쟁 피해를 소모한다 — 같은 피해로 반복 회복 불가
       addLog(S, `${n.name}의 전장에 치유의 손길이 닿았습니다. 상처 입은 ${hurt.length}곳이 숨을 돌립니다.`, 2, p, ow); break; }
     case 'mobilize': {
       if (needNation()) break;

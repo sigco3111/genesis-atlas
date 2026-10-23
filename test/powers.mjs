@@ -199,17 +199,29 @@ if (city >= 0) {
     let hprov = -1; for (let q = 0; q < N; q++) if (P.owner[q] === wnat && P.pop[q] > 10) { hprov = q; break; }
     ok(hprov >= 0, 'warheal target province alive');
     if (hprov >= 0) {
+      // 불안만으로는 대상이 안 된다: 기록된 점령 피해(recentCaps)가 있어야 한다
       P.unrest[hprov] = 0.6;
+      S.recentCaps = (S.recentCaps || []).filter((c) => c.q !== hprov);
+      const uNo = P.unrest[hprov], pNo = P.pop[hprov];
+      sim.applyPower(S, map, 'warheal', hprov); // 같은 국가의 다른 기록 보유 지방은 치유될 수 있다 — 무기록 지방만 검증
+      ok(P.unrest[hprov] === uNo && P.pop[hprov] === pNo, 'warheal skips unrest-only province (no capture record)');
+      // 점령 기록을 심으면 치유 가능
+      S.recentCaps.push({ p: hprov, q: hprov, t: wnat, y: S.year, big: 0 });
       const u0 = P.unrest[hprov], pop0 = P.pop[hprov];
       const r3 = sim.applyPower(S, map, 'warheal', hprov);
-      ok(r3.ok, 'warheal ok');
+      ok(r3.ok, 'warheal ok with capture record');
       ok(P.unrest[hprov] < u0 && P.pop[hprov] > pop0, 'warheal unrest down pop up');
       ok(r3.diff.events.some((e) => e.includes('치유')), 'warheal logged');
+      ok(!S.recentCaps.some((c) => c.q === hprov), 'warheal consumes the damage record');
+      // 같은 피해로 반복 회복 불가
+      P.unrest[hprov] = 0.6;
+      const r3b = sim.applyPower(S, map, 'warheal', hprov);
+      ok(!r3b.ok, 'warheal cannot re-heal consumed damage');
     }
     if (pprov >= 0) {
       for (let q = 0; q < N; q++) if (P.owner[q] === pnat) P.unrest[q] = 0.1;
       const r4 = sim.applyPower(S, map, 'warheal', pprov);
-      ok(!r4.ok && r4.msg.includes('상처'), 'warheal refused when no damage');
+      ok(!r4.ok && r4.msg.includes('점령'), 'warheal refused when no damage');
     }
     for (const w2 of [...S.wars]) sim.endWar(S, map, w2, '');
     sim.step(S, map);
