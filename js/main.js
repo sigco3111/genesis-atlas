@@ -207,13 +207,14 @@ function firePower(type, p) {
   showPowerResult(type, p, r.diff);
   needRefresh = true; R.sel = p; R.paintHL();
 }
+const dnum = (v) => (v < 0 ? '-' : '') + numStr(Math.abs(v));
 function showPowerResult(type, p, d) {
   const el = pwEl('pwres'); if (!d) { el.classList.add('hide'); return; }
   const nm = S.provName[p] || '';
   let h = `<div class="prhead">${PW_ICON[type] || ''} ${sim.POWERS[type].name} 결과${nm ? ' — ' + nm : ''}</div>`;
   const lines = [];
   const ctr = d.provs.find((x) => x.p === p);
-  if (ctr && ctr.pop1 !== ctr.pop0) { const dp = ctr.pop1 - ctr.pop0; lines.push(`인구 ${numStr(ctr.pop0)} → ${numStr(ctr.pop1)} <em class="${dp > 0 ? 'up' : 'down'}">(${dp > 0 ? '+' : ''}${numStr(dp)})</em>`); }
+  if (ctr && ctr.pop1 !== ctr.pop0) { const dp = ctr.pop1 - ctr.pop0; lines.push(`인구 ${numStr(ctr.pop0)} → ${numStr(ctr.pop1)} <em class="${dp > 0 ? 'up' : 'down'}">(${dp > 0 ? '+' : ''}${dnum(dp)})</em>`); }
   const nearLost = d.popLost - (ctr && ctr.pop1 < ctr.pop0 ? ctr.pop0 - ctr.pop1 : 0);
   if (nearLost > 0) lines.push(`주변 인구 <em class="down">-${numStr(Math.round(nearLost))}</em>`);
   else if (!ctr && d.popLost > 0) lines.push(`인구 <em class="down">-${numStr(Math.round(d.popLost))}</em>`);
