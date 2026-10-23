@@ -107,4 +107,60 @@ if (city >= 0) {
   ok(sim.powerArea(S, map, 'hero', owned).shape === 'nation', 'hero shape nation');
   ok(sim.powerArea(S, map, 'bless', owned).shape === 'cluster', 'bless shape cluster');
 }
+// 12. 전성기: 50년 지속 버프, 갱신·만료·저장 호환
+{
+  const nid = P.owner[owned]; const n = S.nations[nid];
+  const aG = sim.powerArea(S, map, 'goldenage', owned);
+  ok(aG.ok && aG.shape === 'nation' && aG.nation === nid, 'goldenage nation area');
+  const q0 = S.fxQueue.length;
+  const r = sim.applyPower(S, map, 'goldenage', owned);
+  ok(r.ok, 'goldenage ok');
+  const b = (S.buffs || []).find((x) => x.nat === nid);
+  ok(b && b.until === S.year + 50, 'goldenage buff 50y');
+  ok(r.diff.events.some((e) => e.includes('전성기')), 'goldenage logged');
+  ok(S.fxQueue.length === q0 + 1 && S.fxQueue[S.fxQueue.length - 1][1] === 'goldenage', 'goldenage fx pushed');
+  ok(sim.powerArea(S, map, 'goldenage', owned).expect.includes('새로 이어'), 'goldenage re-arm preview notes refresh');
+  for (let i = 0; i < 30; i++) sim.step(S, map);
+  ok((S.buffs || []).some((x) => x.nat === nid), 'goldenage persists 30y');
+  b.until = S.year; sim.step(S, map);
+  ok(!(S.buffs || []).some((x) => x.nat === nid), 'goldenage expires');
+  ok(S.log.some((l) => l.t.includes('전성기가 저물')), 'goldenage expiry logged');
+}
+// 13. 이주의 바람: 인구 이동과 정착
+{
+  let src = -1, tg = null;
+  const findM = () => {
+    for (let p = 0; p < map.provinces.length && src < 0; p++) {
+      if (P.pop[p] < 200) continue;
+      const a = sim.powerArea(S, map, 'migrate', p);
+      if (a.ok) { src = p; tg = a.provs.slice(1); }
+    }
+  };
+  findM();
+  for (let t = 0; src < 0 && t < 3; t++) { for (let i = 0; i < 800; i++) sim.step(S, map); findM(); }
+  ok(src >= 0, 'migrate source found');
+  let sparse = -1; for (let q = 0; q < map.provinces.length; q++) if (P.pop[q] < 200) { sparse = q; break; }
+  if (sparse >= 0) ok(!sim.powerArea(S, map, 'migrate', sparse).ok, 'migrate on sparse land invalid');
+  if (src >= 0) {
+    const aM = sim.powerArea(S, map, 'migrate', src);
+    ok(aM.ok && aM.shape === 'cluster' && aM.provs[0] === src && aM.provs.length >= 2, 'migrate cluster area');
+    const pop0 = P.pop[src]; const t0 = tg.map((q) => P.pop[q]);
+    const q0 = S.fxQueue.length;
+    const r = sim.applyPower(S, map, 'migrate', src);
+    ok(r.ok, 'migrate ok');
+    ok(P.pop[src] < pop0, 'migrate source pop decreased');
+    ok(tg.some((q, i) => P.pop[q] > t0[i]), 'migrate target pop increased');
+    ok(r.diff.provs.some((d) => d.p === src && d.pop1 < d.pop0), 'migrate diff reports source');
+    ok(S.fxQueue.length === q0 + 1 && S.fxQueue[S.fxQueue.length - 1][1] === 'migrate', 'migrate fx pushed');
+  }
+}
+// 14. 구형 세이브(buffs 없음) 복원 호환
+{
+  const j = JSON.parse(sim.serialize(S)); delete j.buffs;
+  const S2 = sim.restore(j);
+  ok(Array.isArray(S2.buffs), 'old save restore gets buffs=[]');
+  sim.step(S2, map);
+  const j2 = JSON.parse(sim.serialize(S));
+  ok(Array.isArray(j2.buffs), 'serialize keeps buffs');
+}
 console.log(fail ? 'FAILED ' + fail : 'ALL OK'); process.exit(fail ? 1 : 0);

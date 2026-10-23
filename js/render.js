@@ -406,7 +406,7 @@ const FX_STYLE = {
   quake: { c: '#241c12', dust: '#d8cdb4' }, volcano: { c: '#ff7a3c' }, meteor: { c: '#ffd27a' },
   flood: { c: '#6fb7ff' }, tribe: { c: '#b8e986' }, prophet: { c: '#ffd76a' },
   hero: { c: '#ffd24a' }, revolt: { c: '#ff6a3c' }, peace: { c: '#bfe3ff' },
-  war: { c: '#ff5050' }, warshout: { c: '#ff3b30' },
+  war: { c: '#ff5050' }, warshout: { c: '#ff3b30' }, goldenage: { c: '#ffcf4d' }, migrate: { c: '#a8d8ff' },
 };
 function drawFx(ctx, e, x, y, z, time) {
   const k = e.t / 2.4, a = 1 - k;
@@ -581,6 +581,35 @@ function drawFx(ctx, e, x, y, z, time) {
       ring((6 + k * 30) * u, 2);
       break;
     }
+    case 'goldenage': { // 찬란한 태양 광륜: 퍼지는 광선 + 솟는 불똥
+      ring((8 + k * 40) * u, 3 * a + 0.5);
+      ring((4 + k * 22) * u, 1.5 * a + 0.3, '#fff2c0');
+      ctx.strokeStyle = st.c; ctx.lineWidth = Math.max(1, 1.8 * u);
+      for (let n = 0; n < 12; n++) {
+        const ang = (n / 12) * Math.PI * 2 + k * 0.6;
+        const r0 = (10 + k * 18) * u, r1 = (18 + k * 44) * u;
+        ctx.globalAlpha = a * 0.9;
+        ctx.beginPath(); ctx.moveTo(x + Math.cos(ang) * r0, y + Math.sin(ang) * r0); ctx.lineTo(x + Math.cos(ang) * r1, y + Math.sin(ang) * r1); ctx.stroke();
+      }
+      ctx.fillStyle = '#fff2c0';
+      for (let n = 0; n < 10; n++) {
+        const ang = rnd(n + 5) * Math.PI * 2, rr = rnd(n + 17) * 26 * u;
+        const fy = y - ((k * 1.3 + rnd(n + 40)) % 1) * 40 * u;
+        ctx.globalAlpha = a * 0.8;
+        ctx.beginPath(); ctx.arc(x + Math.cos(ang) * rr, fy, 1.6 * u, 0, 7); ctx.fill();
+      }
+      break; }
+    case 'migrate': { // 바깥으로 퍼져 나가는 이주 행렬
+      ring((5 + k * 20) * u, 1.5 * a + 0.3);
+      ctx.strokeStyle = st.c; ctx.lineWidth = Math.max(1, 1.6 * u); ctx.fillStyle = st.c;
+      for (let n = 0; n < 8; n++) {
+        const ang = (n / 8) * Math.PI * 2 + rnd(n) * 0.5;
+        const r0 = (6 + k * 30 + rnd(n + 9) * 8) * u, r1 = r0 + 9 * u;
+        ctx.globalAlpha = a * 0.9;
+        ctx.beginPath(); ctx.moveTo(x + Math.cos(ang) * r0, y + Math.sin(ang) * r0); ctx.lineTo(x + Math.cos(ang) * r1, y + Math.sin(ang) * r1); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x + Math.cos(ang) * r1, y + Math.sin(ang) * r1, 1.8 * u, 0, 7); ctx.fill();
+      }
+      break; }
     default: { // 기존 공통 이중 링 (전쟁 점령 등)
       ring(6 + k * 46 * u, 3 * a + 1, e.color);
       ring(3 + k * 20, 2 * a + 0.5, e.color);

@@ -14,8 +14,10 @@ export const POWERS = {
   volcano: { name: '화산 폭발', desc: '중심에 큰 피해를 주지만 주변 땅이 비옥해집니다.' },
   meteor: { name: '운석', desc: '한 지방을 거의 지우고 주변에 큰 피해를 줍니다. 흉터가 오래 남습니다.' },
   tribe: { name: '새 부족 탄생', desc: '사람이 없는 빈 땅에 새 부족을 내려보냅니다.' },
+  migrate: { name: '이주의 바람', desc: '붐비는 지방의 주민들이 주변 빈 땅으로 이주해 새 정착지를 엽니다.' },
   prophet: { name: '예언자', desc: '지역에 새 신앙을 일으키고 주변으로 퍼뜨립니다.' },
   hero: { name: '영웅 강림', desc: '해당 국가에 영웅이 나타나 안정도와 학문이 오릅니다.' },
+  goldenage: { name: '전성기', desc: '한 국가에 50년간 전성기를 엽니다: 학문이 빨리 진보하고 문화가 퍼지며 국가가 안정됩니다.' },
   revolt: { name: '민중 봉기', desc: '지역의 불만을 폭발시켜 독립을 부추깁니다.' },
   peace: { name: '평화의 신탁', desc: '해당 국가가 치르는 모든 전쟁을 끝냅니다.' },
   war: { name: '전쟁의 불씨', desc: '이웃과의 관계를 악화시켜 전쟁을 부추깁니다.' },
@@ -31,7 +33,7 @@ export function createState(map, opts = {}) {
     nations: [], cultures: [], religions: [], wars: [], truce: {}, log: [], hist: [], routes: [], cityName: new Array(N).fill(''), provName: new Array(N).fill(''),
     auto: !!opts.auto, aggr: opts.aggr ?? 1, worldFirst: {}, stats: {}, fr: null, nextWar: 1, track: null,
     recentCaps: [], warHist: [],
-    eventsOn: opts.events !== false, deaths: { war: 0, plague: 0, famine: 0 }, fxQueue: [],
+    eventsOn: opts.events !== false, deaths: { war: 0, plague: 0, famine: 0 }, fxQueue: [], buffs: [],
   };
   if (S.mode === 'real') initReal(S, map, opts); else initEmergent(S, map, opts);
   computeFronts(S, map); aggregate(S, map); sampleHistory(S);
@@ -243,6 +245,7 @@ export function sampleTrack(S) {
 // ---------- 한 해 진행 ----------
 export function step(S, map) {
   S.year++; if (S.mode === 'emergent' && S.year === 0) S.year = 1;
+  if (S.buffs && S.buffs.length) S.buffs = S.buffs.filter((b) => { if (b.until > S.year) return true; const n = S.nations[b.nat]; if (n && n.alive) addLog(S, `${n.name}의 전성기가 저물었습니다.`, 1); return false; });
   stepProvinces(S, map);
   if (S.year % 2 === 0 || !S.fr) computeFronts(S, map);
   aggregate(S, map);
@@ -257,6 +260,7 @@ export function step(S, map) {
 }
 
 const LV_YEARS = [5000, 3000, 1500, 1100, 800, 350, 150, 100, 150, 400, 400];
+function goldenUntil(S, nat) { if (!S.buffs) return 0; for (const b of S.buffs) if (b.nat === nat && b.until > S.year) return b.until; return 0; }
 function techCurve(t) { const i = Math.min(9, Math.floor(t)); const f = t - i; const d = LV_YEARS[i] * (1 - f) + LV_YEARS[i + 1] * f; return t >= 9.6 ? 0 : 0.445 / d; }
 function stepProvinces(S, map) {
   const rng = S.rng, P = S.P, N = map.provinces.length; const prv = map.provinces;
@@ -274,7 +278,7 @@ function stepProvinces(S, map) {
       const lead = own >= 0 ? S.nations[own].lead.sci : 0.85;
       const cap = own >= 0 && S.nations[own].cap === p ? 1.2 : 1;
       let dt = S.techRate * techCurve(t) * (0.5 + 0.5 * o.fert) * (0.8 + 0.2 * Math.log10(1 + pop / 400)) * lead * cap;
-      if (P.city[p]) dt *= 1.1; if (P.plague[p]) dt *= 0.5;
+      if (P.city[p]) dt *= 1.1; if (P.plague[p]) dt *= 0.5; if (own >= 0 && goldenUntil(S, own)) dt *= 1.5;
       P.tech[p] = t + dt;
       let mx = 0; const L = o.land; for (let k = 0; k < L.length; k++) { const q = L[k]; if (P.pop[q] > 15 && P.tech[q] > mx) mx = P.tech[q]; }
       if (t >= 1.5 && o.k) { const Sx = o.sea; for (let k = 0; k < Sx.length; k++) { const q = Sx[k]; if (P.pop[q] > 15 && P.tech[q] - 0.4 > mx) mx = P.tech[q] - 0.4; } }
@@ -304,7 +308,7 @@ function stepProvinces(S, map) {
       if (lv === 0 && !S.cityName[p]) S.cityName[p] = genName(S.cultures[Math.max(0, P.cult[p])].lang, rng, 'city');
       if (lv === 1 && own >= 0 && rng.chance(0.5)) addLog(S, `${S.cityName[p]}이(가) 대도시로 성장했습니다. (${S.nations[own].name})`, 1, p, own);
     } else if (lv > 0 && pop < need * (lv === 1 ? 0.35 : lv === 2 ? 1.5 : 8)) P.city[p] = lv - 1;
-    if (rng.next() < 0.004) { const L = o.land; if (L.length) { const q = L[rng.int(L.length)]; if (P.pop[q] > P.pop[p] * 1.5 && P.cult[q] >= 0 && P.cult[q] !== P.cult[p] && P.owner[p] === P.owner[q]) P.cult[p] = P.cult[q]; } }
+    if (rng.next() < (own >= 0 && goldenUntil(S, own) ? 0.012 : 0.004)) { const L = o.land; if (L.length) { const q = L[rng.int(L.length)]; if (P.pop[q] > P.pop[p] * 1.5 && P.cult[q] >= 0 && P.cult[q] !== P.cult[p] && P.owner[p] === P.owner[q]) P.cult[p] = P.cult[q]; } }
     if (rng.next() < 0.003) { const L = o.land; if (L.length) { const q = L[rng.int(L.length)]; if (P.rel[q] >= 0 && P.rel[q] !== P.rel[p] && P.pop[q] > P.pop[p]) P.rel[p] = P.rel[q]; } }
     if (pop > 8000 && rng.next() < 0.00035 && S.religions.length < 60) {
       const rl = newReligion(S, rng, P.cult[p], p, S.year); P.rel[p] = rl; addLog(S, `${S.provName[p] || '이름 없는 땅'}에서 새로운 신앙 '${S.religions[rl].name}'이(가) 일어났습니다.`, 2, p, own);
@@ -328,12 +332,14 @@ function stepNations(S, map) {
     n.stab += (target - n.stab) * 0.06 + (rng.next() - 0.5) * 0.02;
     n.exh = Math.max(0, n.exh - (wc ? 0.004 : 0.04));
     n.stab = clamp(n.stab, 0.02, 1);
+    const gld = goldenUntil(S, n.id);
+    if (gld) n.stab = Math.min(1, n.stab + 0.02);
     if (rng.next() < 1 / 34) { n.lead = newLeader(S, S.cultures[Math.max(0, n.cult)].lang); if (n.pc >= 3) addLog(S, `${n.name}의 새 지도자 ${n.lead.name}이(가) 즉위했습니다. (${traitText(n.lead)})`, 1, n.cap, n.id); }
     const cap = prv[n.cap];
     for (let p = 0; p < N; p++) {
       if (P.owner[p] !== n.id) continue;
       const o = prv[p]; const d = Math.hypot(o.x - cap.x, o.y - cap.y) / 160;
-      let u = P.unrest[p] + (P.cult[p] !== n.cult ? 0.010 : -0.008) + d * 0.0012 + (n.stab < 0.4 ? 0.012 : -0.004) + (P.plague[p] ? 0.01 : 0);
+      let u = P.unrest[p] + (P.cult[p] !== n.cult ? 0.010 : -0.008) + d * 0.0012 + (n.stab < 0.4 ? 0.012 : -0.004) + (P.plague[p] ? 0.01 : 0) - (gld ? 0.015 : 0);
       P.unrest[p] = u = clamp(u, 0, 1);
       if (u > 0.985 && rng.next() < 0.08 && n.pc > 1 && p !== n.cap && P.pop[p] > 30) revolt(S, map, p, n);
     }
@@ -533,6 +539,14 @@ export function disaster(S, map, kind, p) {
 
 // ---------- 신의 권능 ----------
 // 권능 대상 범위 미리보기: 유효성, 영향 지방 목록, 예상 효과 문구를 돌려준다 (DOM 없음).
+function migrateTargets(S, map, p) {
+  const P = S.P, o = map.provinces[p], out = [];
+  const fits = (q) => { const Kq = capacity(S, map, q) || 1; return P.pop[q] < Kq * 0.35 && map.provinces[q].fert > 0.04; };
+  for (const q of o.land || []) if (q >= 0 && fits(q)) out.push({ q, viaSea: false });
+  if (o.k && P.tech[p] >= 1.2) for (const q of o.sea || []) if (q >= 0 && fits(q)) out.push({ q, viaSea: true });
+  return out;
+}
+
 export function powerArea(S, map, type, p) {
   if (!POWERS[type]) return { ok: false, msg: '알 수 없는 권능', provs: [] };
   if (!S.fr) computeFronts(S, map);
@@ -550,8 +564,19 @@ export function powerArea(S, map, type, p) {
     case 'meteor': return { ok: true, provs: [p, ...near], shape: 'cluster', expect: '중심 인구 약 -80% · 도시 전멸 · 인접 약 -30% · 흉터가 오래 남음' };
     case 'plague': return P.pop[p] < 10 ? { ok: false, msg: '사람이 살지 않는 곳입니다', provs: [p] } : { ok: true, provs: [p], shape: 'spot', expect: '역병 발병 · 이웃으로 번질 수 있습니다' };
     case 'tribe': return (P.pop[p] > 5 || map.provinces[p].fert < 0.05) ? { ok: false, msg: '사람이 없는 비옥한 땅에서만 쓸 수 있습니다', provs: [p] } : { ok: true, provs: [p], shape: 'spot', expect: '새 부족이 국가를 세웁니다' };
+    case 'migrate': {
+      if (P.pop[p] < 200) return { ok: false, msg: '이주시킬 만큼 사람이 많지 않습니다', provs: [p] };
+      const tg = migrateTargets(S, map, p);
+      if (!tg.length) return { ok: false, msg: '주변에 이주할 만한 빈 땅이 없습니다', provs: [p] };
+      return { ok: true, provs: [p, ...tg.map((t) => t.q)], shape: 'cluster', expect: '인구 약 3할이 주변 빈 땅 ' + tg.length + '곳으로 이주해 정착합니다' };
+    }
     case 'prophet': return P.pop[p] < 10 ? { ok: false, msg: '사람이 없는 곳입니다', provs: [p] } : { ok: true, provs: [p, ...near.filter((q) => P.pop[q] > 5)], shape: 'cluster', expect: '새 신앙이 일어나 주변으로 퍼집니다' };
     case 'hero': return ow < 0 ? noNation : { ok: true, provs: nationProvs(ow), nation: ow, shape: 'nation', expect: S.nations[ow].name + ' 전체: 안정도 상승 · 불안 감소 · 학문 상승' };
+    case 'goldenage': {
+      if (ow < 0) return noNation;
+      const left = goldenUntil(S, ow);
+      return { ok: true, provs: nationProvs(ow), nation: ow, shape: 'nation', expect: S.nations[ow].name + ' 전체: ' + (left ? '전성기가 50년으로 새로 이어집니다' : '50년간 학문 +50% · 문화 확산 가속 · 안정 상승 · 불안 감소') };
+    }
     case 'revolt': {
       if (ow < 0) return noNation;
       const n = S.nations[ow];
@@ -598,8 +623,35 @@ export function applyPower(S, map, type, p) {
       const cu = newCulture(S, S.rng); const rl = newReligion(S, S.rng, cu, p, S.year); P.pop[p] = 150; P.tech[p] = Math.max(0.1, S.stats.maxT * 0.2); P.cult[p] = cu; P.rel[p] = rl; nameProvince(S, map, p);
       const n = newNation(S, map, p, null, cu, P.tech[p]); P.owner[p] = n.id; n.gov = '부족 연맹'; S.cityName[p] = genName(S.cultures[cu].lang, S.rng, 'city');
       addLog(S, `신이 ${nm}에 새 부족 ${n.name}을(를) 내려보냈습니다.`, 2, p, n.id); break; }
+    case 'migrate': {
+      if (P.pop[p] < 200) { ok = false; msg = '이주시킬 만큼 사람이 많지 않습니다'; break; }
+      const tg = migrateTargets(S, map, p);
+      if (!tg.length) { ok = false; msg = '주변에 이주할 만한 빈 땅이 없습니다'; break; }
+      const rng = S.rng; let moved = 0, settled = 0; const capMove = P.pop[p] * 0.3;
+      for (const t of tg) {
+        if (moved >= capMove) break;
+        const Kq = capacity(S, map, t.q) || 1;
+        const mv = Math.min(capMove - moved, P.pop[p] * 0.1, Kq * 0.03 + 10);
+        if (mv <= 0.5) continue;
+        const wasEmpty = P.pop[t.q] < 1;
+        P.pop[p] -= mv; P.pop[t.q] += mv; moved += mv;
+        if (wasEmpty) {
+          settled++;
+          let cu = P.cult[p]; if (cu >= 0 && S.cultures.length < 140 && (t.viaSea || rng.chance(0.03))) cu = newCulture(S, rng, cu);
+          P.cult[t.q] = cu; P.rel[t.q] = P.rel[p]; nameProvince(S, map, t.q); P.tech[t.q] = Math.max(P.tech[t.q], P.tech[p] * 0.85);
+          if (t.viaSea && ow >= 0 && rng.chance(0.5)) P.owner[t.q] = ow;
+        }
+      }
+      addLog(S, `${nm}의 주민들이 바람을 따라 새 땅으로 이주했습니다.` + (settled ? ` ${settled}곳에 새 정착지가 생겼습니다.` : ''), 2, p, ow); break; }
     case 'prophet': { if (P.pop[p] < 10) { ok = false; msg = '사람이 없는 곳입니다'; break; } const rl = newReligion(S, S.rng, P.cult[p], p, S.year); P.rel[p] = rl; for (const q of map.provinces[p].land) if (P.pop[q] > 5) P.rel[q] = rl; addLog(S, `예언자가 나타나 ${nm}에 '${S.religions[rl].name}'을(를) 전했습니다.`, 2, p, ow); break; }
     case 'hero': { if (needNation()) break; const n = S.nations[ow]; n.stab = Math.min(1, n.stab + 0.3); n.lead.sci *= 1.25; for (let q = 0; q < P.owner.length; q++) if (P.owner[q] === ow) { P.unrest[q] *= 0.5; P.tech[q] += 0.05; } addLog(S, `신의 뜻으로 ${n.name}에 영웅이 강림했습니다.`, 2, p, ow); break; }
+    case 'goldenage': {
+      if (needNation()) break;
+      const n = S.nations[ow];
+      S.buffs = (S.buffs || []).filter((b) => b.nat !== ow);
+      S.buffs.push({ nat: ow, until: S.year + 50 });
+      n.stab = Math.min(1, n.stab + 0.05);
+      addLog(S, `${n.name}에 전성기가 찾아왔습니다. 앞으로 50년간 학문과 문화가 꽃핍니다.`, 2, p, ow); break; }
     case 'revolt': { if (needNation()) break; const n = S.nations[ow]; if (n.pc < 2 || n.cap === p) { ok = false; msg = '수도나 단일 지방 국가에는 쓸 수 없습니다'; break; } revolt(S, map, p, n); break; }
     case 'peace': { if (needNation()) break; const ws = S.wars.filter((w) => w.A.includes(ow) || w.D.includes(ow)); if (!ws.length) { ok = false; msg = '전쟁 중이 아닙니다'; break; } for (const w of ws) endWar(S, map, w, ''); addLog(S, `평화의 신탁이 내려 ${S.nations[ow].name}의 전쟁이 멈췄습니다.`, 2, p, ow); break; }
     case 'war': { if (needNation()) break; const n = S.nations[ow]; const nb = [...neighborsOf(S, n).keys()]; if (!nb.length) { ok = false; msg = '이웃 국가가 없습니다'; break; } const m = S.nations[S.rng.pick(nb)]; n.relat[m.id] = -90; m.relat[n.id] = -90; delete S.truce[tkey(n.id, m.id)]; startWar(S, map, n, m, '(신의 속삭임)'); break; }
@@ -645,7 +697,7 @@ export function restore(json) {
   const S = typeof json === 'string' ? JSON.parse(json) : json;
   if (!S.P.km) S.P.km = new Array(S.P.pop.length).fill(1);
   for (const k of Object.keys(TYPED)) S.P[k] = TYPED[k].from(S.P[k]);
-  const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1; S.recentCaps = S.recentCaps || []; S.warHist = S.warHist || [];
+  const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1; S.recentCaps = S.recentCaps || []; S.warHist = S.warHist || []; S.buffs = S.buffs || [];
   for (const w of S.wars) { w.caps = w.caps || []; w.A0 = w.A0 || [...w.A]; w.D0 = w.D0 || [...w.D]; }
   for (const n of S.nations) if (!n.hist || !n.hist.length) n.hist = [[S.year, Math.round(n.pop || 0), n.pc || 0, n.stab == null ? 0.5 : Math.round(n.stab * 1000) / 1000]];
   return S;

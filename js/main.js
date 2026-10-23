@@ -241,7 +241,7 @@ function setPwHintFold(v) { pwHintFold = v; try { localStorage.setItem('genesis-
 function setResFold(v) { resFold = v; try { localStorage.setItem('genesis-atlas-resfold', v ? '1' : '0'); } catch (e) {} }
 // ---------- 권능 미리보기 / 결과 요약 ----------
 const PW_GOOD = new Set(['bless', 'tribe', 'prophet', 'hero', 'peace']);
-const PW_ICON = { bless: '🌧', drought: '🏜', plague: '☠', quake: '💥', volcano: '🌋', meteor: '☄', tribe: '🛖', prophet: '📿', hero: '⭐', revolt: '🔥', peace: '🕊', war: '⚔' };
+const PW_ICON = { bless: '🌧', drought: '🏜', plague: '☠', quake: '💥', volcano: '🌋', meteor: '☄', tribe: '🛖', prophet: '📿', hero: '⭐', revolt: '🔥', peace: '🕊', war: '⚔', migrate: '🌬', goldenage: '🌅' };
 let pwPending = null, lastPtr = 'mouse';
 // 힌트/결과 카드: CSS나 HTML이 캐시로 섞여도 깨지지 않도록 필수 스타일을 JS가 보장한다.
 function pwEl(id) {
