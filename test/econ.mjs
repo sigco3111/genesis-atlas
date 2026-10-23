@@ -14,7 +14,7 @@ const summarize = (S, label) => {
   const al = S.nations.filter((n) => n.alive && n.pc >= 2);
   const avg = (f) => al.reduce((a, n) => a + f(n), 0) / Math.max(1, al.length);
   const low = (g) => al.filter((n) => n.eco.sat[g] < 0.8).length;
-  console.log(label, 'year', S.year, 'nations', al.length, 'pop', Math.round(S.stats.world), 'sat', GOODS.map((g, i) => g.name + ' ' + avg((n) => n.eco.sat[i]).toFixed(2) + '(<0.8:' + low(i) + ')').join(' '), 'lift%p', lift(al), 'deliv', S.trade.deliv.map((v) => Math.round(v)).join('/'), 'voy', S.trade.voyages, 'val', Math.round(S.trade.value), 'famine', Math.round(S.deaths.famine));
+  console.log(label, 'year', S.year, 'nations', al.length, 'pop', Math.round(S.stats.world), 'sat', GOODS.map((g, i) => g.name + ' ' + avg((n) => n.eco.sat[i]).toFixed(2) + '(<0.8:' + low(i) + ')').join(' '), 'lift%p', lift(al), 'deliv', S.trade.deliv.map((v) => Math.round(v)).join('/'), 'voy', S.trade.voyages, 'val', Math.round(S.trade.value), 'foodShort(pop-yr)', Math.round(S.foodShort||0));
   return al;
 };
 const A = run(false, 600), B = run(true, 600);

@@ -108,7 +108,7 @@ export function stepEcon(S, map, addLog) {
     // 기근
     if (e.sat[0] < 0.6 && e.age > 10) {
       e.fam += (1 - e.sat[0]);
-      S.deaths.famine += n.pop * 0.0015 * (1 - e.sat[0]) * ramp;
+      S.foodShort = (S.foodShort || 0) + n.pop * (1 - e.sat[0]); // 식량 부족 압력 지표(인구·년, 사망자 아님)
       if (S.year - e.lastLog > 40 && n.pc >= 2 && e.sat[0] < 0.5 && S.rng.chance(0.12)) { e.lastLog = S.year; addLog(S, `${n.name}에 곡물이 모자라 기근이 번지고 있습니다. (자급률 ${Math.round(e.sat[0] * 100)}%)`, 2, n.cap, n.id); }
     } else e.fam = Math.max(0, e.fam - 0.5);
   }
