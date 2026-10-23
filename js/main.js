@@ -90,7 +90,7 @@ function buildBars() {
   const paintCap = () => { cb.textContent = '점령 ' + capAgeLabel(R.capAge); cb.classList.toggle('on', R.capAge > 0); cb.title = '점령 화살표·링을 몇 년 동안 지도에 남길지 바꿉니다 (누를 때마다 3년 → 10년 → 30년 → 끄기)'; };
   paintCap();
   cb.onclick = () => { R.capAge = nextCapAge(R.capAge); try { localStorage.setItem(CAPAGE_PREF, String(R.capAge)); } catch (e) {} paintCap(); needRefresh = true; };
-  $('modes').appendChild(cb);
+  $('speed').appendChild(cb); // 모바일에서 지도 모드 줄이 세 줄로 늘어나 추적 카드와 겹치지 않게 속도 줄에 둠
   markBars();
 }
 let warFocusIdx = 0;
@@ -108,7 +108,7 @@ $('swar').onclick = () => {
   const w = S.wars[warFocusIdx++ % S.wars.length];
   if (focusWar(w)) toast('⚔ ' + (S.nations[w.A[0]] || {}).name + ' 대 ' + (S.nations[w.D[0]] || {}).name + ' 전선');
 };
-function markBars() { $('rate').textContent = speed ? (speed >= 1 ? '· 1초에 ' + speed + '년' : '· ' + 1 / speed + '초에 1년') : '· 일시정지'; for (const b of $('speed').children) b.classList.toggle('on', +b.dataset.v === speed); for (const b of $('modes').children) if (b.dataset.m) b.classList.toggle('on', b.dataset.m === R.mode); }
+function markBars() { $('rate').textContent = speed ? (speed >= 1 ? '· 1초에 ' + speed + '년' : '· ' + 1 / speed + '초에 1년') : '· 일시정지'; for (const b of $('speed').children) if (b.dataset.v) b.classList.toggle('on', +b.dataset.v === speed); for (const b of $('modes').children) if (b.dataset.m) b.classList.toggle('on', b.dataset.m === R.mode); }
 // ---------- 패널 접기/펼치기 ----------
 const PANEL_PREF = 'genesis-atlas-panel';
 const isMobileLayout = () => window.innerWidth <= 760;
