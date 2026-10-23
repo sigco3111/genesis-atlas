@@ -93,3 +93,27 @@ select,input{background:#12304d;border:1px solid #35597f;border-radius:8px;paddi
 #pwres .prline em{font-style:normal;color:#9bb3cc}
 #pwres .up{color:#8fe08f}#pwres .down{color:#ff9a8a}
 @media(max-width:760px){#pwhint{top:44px;bottom:auto;width:94vw}#pwres{top:44px;bottom:auto;width:94vw}}
+/* v29 국가 비교 */
+.cmpsel{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0}
+.cmpsel select{width:100%;font-size:12px;padding:6px 4px}
+.cmpchips{display:flex;gap:4px;flex-wrap:wrap;margin:4px 0 6px}
+.cmpchips .chip{background:#0e2033;border:1px solid #2a4a6a;color:#cfe3ff;border-radius:12px;padding:3px 9px;font-size:12px}
+.cmpchips .chip:hover{background:#1a3550}
+.cmphead{display:flex;align-items:flex-start;justify-content:space-between;gap:6px;background:#0b2036;border:1px solid #1d3652;border-radius:10px;padding:8px 10px;margin:6px 0}
+.cmphead b{color:#fff}
+.cmphead i{margin-right:3px}
+.cmphead .cmpr{text-align:right}
+.cmphead .cmpvs{color:#ffd27a;font-weight:700;font-size:12px;padding-top:2px}
+.cmphead .cmpgov{font-size:11px;color:#8aa3bd;margin-top:1px}
+.cmpwar{background:#4a1c1c;border:1px solid #a04040;color:#ffb3a6;border-radius:8px;padding:6px 10px;margin:6px 0;font-weight:600}
+.cmprel{color:#9bb3cc;font-size:12px;margin:2px 0 4px}
+.cmprow{display:grid;grid-template-columns:78px 1fr 1fr;gap:6px;border-bottom:1px solid #1d3652;padding:3px 0;font-size:13px;align-items:baseline}
+.cmprow span{color:#9bb3cc}
+.cmprow b{text-align:right;font-weight:500;word-break:keep-all}
+.cmprow b small{color:#8aa3bd;font-weight:400}
+.cmprow b.win{color:#8fe08f;font-weight:700}
+.cmpgrow{display:flex;gap:6px;margin:6px 0 2px;font-size:12px}
+.cmpgrow .g{flex:1;background:#0b2036;border-radius:8px;padding:5px 8px;color:#cfe3ff}
+.cmpgrow .g em{font-style:normal;font-weight:700}
+.cmpgrow .up{color:#8fe08f}.cmpgrow .down{color:#ff9a8a}
+canvas#cmpSpark{width:100%;height:96px;background:#0b2036;border-radius:6px}

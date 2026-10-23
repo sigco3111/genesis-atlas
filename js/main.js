@@ -68,7 +68,7 @@ $('cont').onclick = async () => {
 function boot() { console.log('boot', S.mode, S.year);
   $('start').classList.add('hide');
   R = new Renderer($('map'), map); if (!boot.done) { boot.done = true; bindInput(); window.addEventListener('resize', () => { R.resize(); needRefresh = true; }); requestAnimationFrame(loop); }
-  R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = 'political'; R.sel = -1; R.trackId = S.track ? S.track.id : -1; speed = window.__speed ?? 1; running = true; needRefresh = true; buildBars(); renderPanel(); renderTrack();
+  R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = 'political'; R.sel = -1; R.trackId = S.track ? S.track.id : -1; cmpA = cmpB = -1; speed = window.__speed ?? 1; running = true; needRefresh = true; buildBars(); renderPanel(); renderTrack();
   let pref = null; try { pref = localStorage.getItem(PANEL_PREF); } catch (e) {}
   setPanelOpen(pref === null ? !isMobileLayout() : pref === '1', false);
   toast('휠·드래그로 이동, 지역을 눌러 살펴보세요');
@@ -243,14 +243,53 @@ function select(p) {
 }
 
 // ---------- 패널 ----------
-const TABS = [['world', '세계'], ['sel', '선택'], ['log', '연대기'], ['god', '권능'], ['set', '설정']];
+const TABS = [['world', '세계'], ['sel', '선택'], ['cmp', '비교'], ['log', '연대기'], ['god', '권능'], ['set', '설정']];
 let panelSig = '';
 let logNat = null; // 연대기 탭 국가 필터 (null = 전체)
+let cmpA = -1, cmpB = -1; // 비교 탭의 두 나라 슬롯
 function goTo(p) { if (p == null || p < 0 || !map.provinces[p]) return; R.sel = p; R.paintHL(); R.focus(p, 4); needRefresh = true; if (isMobileLayout()) setPanelOpen(false); }
 function kv(k, v) { return `<div class="kv"><span>${k}</span><b>${v}</b></div>`; }
+// ---------- 국가 비교 ----------
+function addToCompare(id) {
+  if (cmpA === id || cmpB === id) { tab = 'cmp'; panelSig = ''; renderPanel(); return; }
+  if (cmpA < 0) cmpA = id; else cmpB = id;
+  toast(S.nations[id].name + '을(를) 비교에 담았습니다');
+  tab = 'cmp'; panelSig = ''; renderPanel();
+}
+function cmpNatOptions(selId) {
+  const list = S.nations.filter((n) => n.alive).sort((a, b) => b.pop - a.pop);
+  let o = '<option value="-1">— 나라 선택 —</option>';
+  for (const n of list) o += `<option value="${n.id}"${n.id === selId ? ' selected' : ''}>${n.name} · ${numStr(n.pop)}</option>`;
+  if (selId >= 0 && !list.some((n) => n.id === selId) && S.nations[selId]) o += `<option value="${selId}" selected>${S.nations[selId].name} (멸망)</option>`;
+  return o;
+}
+function drawCmpChart(cv, A, B) {
+  const c = cv.getContext('2d'); const Wd = cv.width, Ht = cv.height;
+  c.clearRect(0, 0, Wd, Ht);
+  const hA = A.hist || [], hB = B.hist || [];
+  const mx = Math.max(1, ...hA.map((x) => x[1]), ...hB.map((x) => x[1]));
+  const y0 = Math.min(hA.length ? hA[0][0] : S.year, hB.length ? hB[0][0] : S.year);
+  const y1 = Math.max(hA.length ? hA[hA.length - 1][0] : S.year, hB.length ? hB[hB.length - 1][0] : S.year, y0 + 1);
+  const X = (y) => (y - y0) / (y1 - y0) * (Wd - 8) + 4;
+  const Y = (v) => Ht - 14 - v / mx * (Ht - 26);
+  c.strokeStyle = '#1d3652'; c.beginPath(); c.moveTo(0, Y(0)); c.lineTo(Wd, Y(0)); c.stroke();
+  for (const [h, rgb] of [[hA, A.rgb], [hB, B.rgb]]) {
+    if (!h.length) continue;
+    c.strokeStyle = 'rgb(' + rgb + ')'; c.lineWidth = 1.6; c.beginPath();
+    h.forEach((x, i) => { const px = X(x[0]), py = Y(x[1]); i ? c.lineTo(px, py) : c.moveTo(px, py); });
+    c.stroke();
+  }
+  c.fillStyle = '#8aa3bd'; c.font = '10px sans-serif';
+  c.fillText(numStr(mx), 4, 11);
+  const ys = (y) => y <= 0 ? 'BC ' + (1 - Math.round(y)) : '' + Math.round(y);
+  const t0 = ys(y0), t1 = ys(y1);
+  c.fillText(t0, 4, Ht - 3);
+  c.fillText(t1, Wd - 4 - c.measureText(t1).width, Ht - 3);
+}
 function renderPanel(auto) {
   if (!S) return;
   if (auto && $('panel').matches(':active')) return;
+  if (auto && tab === 'cmp' && $('tabBody').querySelector('select:focus')) return;
   $('tabs').innerHTML = TABS.map(([k, t]) => `<button data-t="${k}" class="${tab === k ? 'on' : ''}">${t}</button>`).join('');
   for (const b of $('tabs').children) b.onclick = () => { tab = b.dataset.t; panelSig = ''; renderPanel(); };
   const body = $('tabBody'); const st = S.stats; let h = '';
@@ -264,11 +303,54 @@ function renderPanel(auto) {
       h += `<h3>${S.provName[p] || '무인 지대'}</h3>` + kv('인구', numStr(S.P.pop[p])) + kv('기술', S.P.tech[p].toFixed(2)) + kv('불안', Math.round(S.P.unrest[p] * 100) + '%') + kv('도시', S.cityName[p] || '-') + kv('문화', S.P.cult[p] >= 0 ? S.cultures[S.P.cult[p]].name : '-') + kv('신앙', S.P.rel[p] >= 0 ? S.religions[S.P.rel[p]].name : '-');
       if (n) h += `<h3>${n.name}</h3>` + kv('정체', n.gov) + kv('지도자', n.lead.name + ' (' + sim.traitText(n.lead) + ')') + kv('인구', numStr(n.pop)) + kv('지방', n.pc) + kv('안정도', Math.round(n.stab * 100) + '%') + kv('건국', yearStr(n.born)) + kv('전적', n.wins + '승 ' + n.losses + '패');
       if (n && n.alive) h += `<button class="pw" data-trk="${n.id}">${S.track && S.track.id === n.id ? '★ 추적 해제' : '☆ 이 국가 추적'}<small>인구·영토·전쟁 변화를 화면 왼쪽 위 카드로 계속 보여 줍니다.</small></button>`;
+      if (n) h += `<button class="pw" data-cmp="${n.id}">⇄ 이 국가 비교하기<small>다른 나라와 인구·영토·안정도·전적·성장 추이를 나란히 비교합니다.</small></button>`;
       if (n) {
         const nl = sim.nationLog(S, n.id, 6);
         if (nl.length) h += `<h3>${n.name}의 연대기</h3><div class="log nlog">` + nl.map((l) => `<div class="i${l.i}${l.p >= 0 ? ' hasloc' : ''}"${l.p >= 0 ? ` data-lp="${l.p}" title="눌러서 위치로 이동"` : ''}>${yearStr(l.y)} · ${l.t}</div>`).join('') + `</div><button class="pw" data-nlog="${n.id}">연대기 전체 보기<small>이 국가의 건국·지도자·전쟁·권능 개입 기록을 모아 봅니다.</small></button>`;
         else h += `<button class="pw" data-nlog="${n.id}">이 국가의 연대기<small>아직 기록된 사건이 없습니다.</small></button>`;
       }
+    }
+  } else if (tab === 'cmp') {
+    const A = S.nations[cmpA], B = S.nations[cmpB];
+    h += '<h3>국가 비교</h3>';
+    h += `<div class="cmpsel"><select id="cmpSelA" title="첫째 나라">${cmpNatOptions(cmpA)}</select><select id="cmpSelB" title="둘째 나라">${cmpNatOptions(cmpB)}</select></div>`;
+    const chips = [];
+    if (R.sel >= 0 && S.P.owner[R.sel] >= 0) chips.push('<button class="chip" id="cmpAddSel">선택 지역의 국가 담기</button>');
+    if (S.track) chips.push('<button class="chip" id="cmpAddTrk">추적 국가 담기</button>');
+    if (A && B) chips.push('<button class="chip" id="cmpSwap">⇄ 맞바꾸기</button>');
+    if (chips.length) h += '<div class="cmpchips">' + chips.join('') + '</div>';
+    if (!A || !B) h += '<p class="fine">비교할 나라 두 곳을 골라 주세요. 지도에서 지역을 누른 뒤 선택 탭의 `이 국가 비교하기`로도 담을 수 있습니다.</p>';
+    else if (A.id === B.id) h += '<p class="fine">서로 다른 나라를 골라 주세요.</p>';
+    else {
+      const dead = (n) => n.alive ? '' : ` · ${yearStr(n.died)} 멸망`;
+      h += `<div class="cmphead"><div><i style="color:rgb(${A.rgb})">■</i><b>${A.name}</b><div class="cmpgov">${A.gov}${dead(A)}</div></div><span class="cmpvs">VS</span><div class="cmpr"><i style="color:rgb(${B.rgb})">■</i><b>${B.name}</b><div class="cmpgov">${B.gov}${dead(B)}</div></div></div>`;
+      const mutual = S.wars.find((w) => (w.A.includes(A.id) && w.D.includes(B.id)) || (w.A.includes(B.id) && w.D.includes(A.id)));
+      if (mutual) h += `<div class="cmpwar">⚔ 두 나라는 지금 전쟁 중입니다 (${S.year - mutual.start}년째)</div>`;
+      const rel = Math.round(A.relat[B.id] || 0);
+      if (rel) h += `<div class="cmprel">현재 관계 ${rel > 0 ? '+' : ''}${rel} — ${rel >= 30 ? '우호적' : rel <= -30 ? '적대적' : '미묘한 사이'}</div>`;
+      const world = Math.max(1, S.stats.world);
+      const row = (label, va, vb, na, nb) => {
+        const win = na == null || nb == null || na === nb ? null : na > nb ? 'a' : 'b';
+        return `<div class="cmprow"><span>${label}</span><b class="${win === 'a' ? 'win' : ''}">${va}</b><b class="${win === 'b' ? 'win' : ''}">${vb}</b></div>`;
+      };
+      h += row('인구', `${numStr(A.pop)} <small>세계의 ${(A.pop / world * 100).toFixed(1)}%</small>`, `${numStr(B.pop)} <small>세계의 ${(B.pop / world * 100).toFixed(1)}%</small>`, A.pop, B.pop);
+      h += row('영토', A.pc + ' 지방', B.pc + ' 지방', A.pc, B.pc);
+      h += row('안정도', Math.round(A.stab * 100) + '%', Math.round(B.stab * 100) + '%', A.stab, B.stab);
+      h += row('기술', A.tech.toFixed(2) + ' · ' + ERA_NAMES[Math.min(9, Math.floor(A.tech))], B.tech.toFixed(2) + ' · ' + ERA_NAMES[Math.min(9, Math.floor(B.tech))], A.tech, B.tech);
+      h += row('군사력 추정', numStr(A.mil), numStr(B.mil), A.mil, B.mil);
+      const wr = (n) => (n.wins + n.losses) ? ' <small>승률 ' + Math.round(n.wins / (n.wins + n.losses) * 100) + '%</small>' : '';
+      h += row('전적', `${A.wins}승 ${A.losses}패${wr(A)}`, `${B.wins}승 ${B.losses}패${wr(B)}`, A.wins, B.wins);
+      const age = (n) => Math.max(1, (n.alive ? S.year : n.died) - n.born);
+      h += row('건국', `${yearStr(A.born)} <small>${age(A)}년째</small>`, `${yearStr(B.born)} <small>${age(B)}년째</small>`, null, null);
+      h += row('지도자', `${A.lead.name} <small>${sim.traitText(A.lead)}</small>`, `${B.lead.name} <small>${sim.traitText(B.lead)}</small>`, null, null);
+      h += '<h3>인구 추이 비교</h3><canvas id="cmpSpark" width="300" height="96"></canvas>';
+      const gr = (n) => { const hs = n.hist || []; if (hs.length < 2 || !hs[0][1]) return null; return Math.round((hs[hs.length - 1][1] / hs[0][1] - 1) * 100); };
+      const gt = (g) => g == null ? '<em>기록 시작</em>' : `<em class="${g >= 0 ? 'up' : 'down'}">${g >= 0 ? '+' : ''}${g}%</em>`;
+      const ha0 = (A.hist || [])[0], hb0 = (B.hist || [])[0];
+      const since = Math.min(ha0 ? ha0[0] : S.year, hb0 ? hb0[0] : S.year);
+      h += `<div class="cmpgrow"><div class="g"><i style="color:rgb(${A.rgb})">■</i> ${A.name} ${gt(gr(A))}</div><div class="g"><i style="color:rgb(${B.rgb})">■</i> ${B.name} ${gt(gr(B))}</div></div>`;
+      h += `<p class="fine">${yearStr(since)} 이후 인구 추이 · 두 나라 같은 눈금 · 10년 간격 기록</p>`;
+      h += `<div class="cmpchips"><button class="chip" data-cmpgo="${A.cap}">${A.name} 위치로</button><button class="chip" data-cmpgo="${B.cap}">${B.name} 위치로</button></div>`;
     }
   } else if (tab === 'log') {
     const chips = [`<button class="chip ${logNat == null ? 'on' : ''}" data-lf="-1">전체</button>`];
@@ -293,7 +375,7 @@ function renderPanel(auto) {
     h = '<h3>도움말</h3><p class="fine">드래그로 이동, 휠/핀치로 확대. 지역을 누르면 정보가 나옵니다. 위쪽 버튼으로 속도와 지도 모드를 바꾸고, 권능 탭에서 신의 힘을 쓰거나 자동 신 위임을 켜 보세요. 아무것도 하지 않아도 세계는 계속 흘러갑니다.</p><h3>설정</h3><button class="pw" id="bSave">지금 저장</button><button class="pw" id="bExp">파일로 내보내기</button><button class="pw" id="bImp">파일에서 불러오기</button><button class="pw" id="bNew">새 세계 시작</button><input type="file" id="fImp" class="hide" accept=".json">';
     h += '<p class="fine">지도 데이터: Natural Earth (퍼블릭 도메인). 지구 국경은 근사이며 대체 역사입니다.</p>';
   }
-  const sig = tab === 'god' ? 'god' + selPower + S.auto : tab + h.length + (tab === 'world' || tab === 'log' ? Math.floor(S.year / 5) : '');
+  const sig = tab === 'god' ? 'god' + selPower + S.auto : tab + h.length + (tab === 'world' || tab === 'log' || tab === 'cmp' ? Math.floor(S.year / 5) : '');
   if (auto && sig === panelSig) return;
   panelSig = sig; body.innerHTML = h;
   for (const a of body.querySelectorAll('[data-n]')) a.onclick = (e) => { e.preventDefault(); const n = S.nations[+a.dataset.n]; R.sel = n.cap; R.paintHL(); R.focus(n.cap, 3); tab = 'sel'; renderPanel(); };
@@ -304,6 +386,14 @@ function renderPanel(auto) {
   for (const b of body.querySelectorAll('[data-nlog]')) b.onclick = () => { logNat = +b.dataset.nlog; tab = 'log'; panelSig = ''; renderPanel(); };
   for (const b of body.querySelectorAll('[data-p]')) b.onclick = () => { selPower = selPower === b.dataset.p ? null : b.dataset.p; pwPending = null; if (!selPower) { R.setPowerPreview(null); pwEl('pwhint').classList.add('hide'); } toast(selPower ? '지도에 영향 범위가 보입니다. 대상 지역을 누르세요' : '취소'); panelSig = ''; renderPanel(); };
   const q = (id) => body.querySelector('#' + id);
+  for (const b of body.querySelectorAll('[data-cmp]')) b.onclick = () => addToCompare(+b.dataset.cmp);
+  for (const b of body.querySelectorAll('[data-cmpgo]')) b.onclick = () => goTo(+b.dataset.cmpgo);
+  const csa = q('cmpSelA'), csb = q('cmpSelB');
+  if (csa) csa.onchange = () => { cmpA = +csa.value; panelSig = ''; renderPanel(); };
+  if (csb) csb.onchange = () => { cmpB = +csb.value; panelSig = ''; renderPanel(); };
+  if (q('cmpSwap')) q('cmpSwap').onclick = () => { const t = cmpA; cmpA = cmpB; cmpB = t; panelSig = ''; renderPanel(); };
+  if (q('cmpAddSel')) q('cmpAddSel').onclick = () => { if (R.sel >= 0 && S.P.owner[R.sel] >= 0) addToCompare(S.P.owner[R.sel]); };
+  if (q('cmpAddTrk')) q('cmpAddTrk').onclick = () => { if (S.track) addToCompare(S.track.id); };
   if (q('autoBtn')) q('autoBtn').onclick = () => { S.auto = !S.auto; panelSig = ''; renderPanel(); };
   if (q('bSave')) q('bSave').onclick = () => { save(); toast('저장했습니다'); };
   if (q('bNew')) q('bNew').onclick = () => { running = false; $('start').classList.remove('hide'); };
@@ -311,6 +401,7 @@ function renderPanel(auto) {
   if (q('bImp')) q('bImp').onclick = () => q('fImp').click();
   if (q('fImp')) q('fImp').onchange = async (e) => { try { localStorage.setItem(SAVE, await pack(await e.target.files[0].text())); $('cont').click(); } catch (x) { toast('불러오기 실패'); } };
   const sp = q('spark'); if (sp) { const c = sp.getContext('2d'), hs = S.hist; c.strokeStyle = '#6db3ff'; c.beginPath(); const mx = Math.max(1, ...hs.map((x) => x.pop)); hs.forEach((x, i) => { const v = x.pop; const X = i / Math.max(1, hs.length - 1) * 300, Y = 58 - v / mx * 54; i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.stroke(); }
+  const cs = q('cmpSpark'); if (cs && S.nations[cmpA] && S.nations[cmpB] && cmpA !== cmpB) drawCmpChart(cs, S.nations[cmpA], S.nations[cmpB]);
 }
 // ---------- 국가 추적 카드 ----------
 let trackSig = '';

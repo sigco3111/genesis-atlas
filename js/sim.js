@@ -77,7 +77,7 @@ export function newNation(S, map, p, name, cult, tech = 0) {
   const n = {
     id, name: name || genName(lang, rng, 'nation'), rgb: hslToRgb(hue, rng.range(52, 72), rng.range(50, 60)), cap: p, cult, rel: S.P.rel[p],
     gov: '부족', born: S.year, alive: true, died: null, stab: 0.7, lead: newLeader(S, lang), allies: [], pc: 0, pop: 0, tech: 0, mil: 0, lx: 0, ly: 0,
-    peakPop: 0, peakPc: 0, era: 0, relat: {}, exh: 0, gdp: 0, trade: 0, wins: 0, losses: 0,
+    peakPop: 0, peakPc: 0, era: 0, relat: {}, exh: 0, gdp: 0, trade: 0, wins: 0, losses: 0, hist: [[S.year, 0, 0]],
   };
   S.nations.push(n); return n;
 }
@@ -199,6 +199,7 @@ export function aggregate(S, map) {
 }
 function killNation(S, n, how) {
   n.alive = false; n.died = S.year; n.pc = 0;
+  if (n.hist && (!n.hist.length || n.hist[n.hist.length - 1][0] < S.year)) n.hist.push([S.year, 0, 0]);
   addLog(S, `${n.name}이(가) ${how} 역사에서 사라졌습니다. (존속 ${Math.max(1, S.year - n.born)}년)`, n.peakPc >= 3 ? 3 : 2, n.cap, n.id);
   S.wars = S.wars.filter((w) => { w.A = w.A.filter((x) => x !== n.id); w.D = w.D.filter((x) => x !== n.id); return w.A.length && w.D.length; });
   for (const m of S.nations) m.allies = m.allies.filter((x) => x !== n.id);
@@ -207,6 +208,18 @@ function sampleHistory(S) {
   const st = S.stats; const top = S.nations.filter((n) => n.alive).sort((a, b) => b.pop - a.pop).slice(0, 5).map((n) => [n.id, Math.round(n.pop)]);
   S.hist.push({ y: S.year, pop: Math.round(st.world), nn: st.alive, tech: +st.maxT.toFixed(2), wars: S.wars.length, top });
   if (S.hist.length > 900) S.hist.splice(0, 1);
+}
+
+// ---------- 국가별 인구·영토 추이 (비교 차트용, 10년 간격) ----------
+export function sampleNationHist(S) {
+  for (const n of S.nations) {
+    if (!n.alive) continue;
+    if (!n.hist) n.hist = [];
+    const last = n.hist[n.hist.length - 1];
+    if (last && last[0] === S.year) continue;
+    n.hist.push([S.year, Math.round(n.pop), n.pc]);
+    if (n.hist.length > 240) n.hist = n.hist.filter((_, i) => i % 2 === 0);
+  }
 }
 
 // ---------- 국가 추적 ----------
@@ -237,7 +250,7 @@ export function step(S, map) {
   stepWars(S, map);
   if (S.eventsOn) stepEvents(S, map);
   if (S.year % 5 === 0) stepDiplomacy(S, map);
-  if (S.year % 10 === 0) { stepGov(S, map); sampleHistory(S); if (S.auto) autoGod(S, map); }
+  if (S.year % 10 === 0) { stepGov(S, map); sampleHistory(S); sampleNationHist(S); if (S.auto) autoGod(S, map); }
   eraCheck(S, map);
 }
 
@@ -624,6 +637,7 @@ export function restore(json) {
   if (!S.P.km) S.P.km = new Array(S.P.pop.length).fill(1);
   for (const k of Object.keys(TYPED)) S.P[k] = TYPED[k].from(S.P[k]);
   const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1; S.recentCaps = S.recentCaps || [];
+  for (const n of S.nations) if (!n.hist || !n.hist.length) n.hist = [[S.year, Math.round(n.pop || 0), n.pc || 0]];
   return S;
 }
 export { yearStr, numStr };
