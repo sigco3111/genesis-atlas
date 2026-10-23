@@ -129,8 +129,9 @@ function showWarOnMap(sumId) {
     if (pa && !pa.classList.contains('hide')) { const pr = pa.getBoundingClientRect(); if (pr.height > 0) ins.bottom = Math.max(ins.bottom, Math.ceil(R.cssH - pr.top) + 6); }
   }
   const f = fitWarView(pts, R.cssW, R.cssH, R.minZ, ins);
-  // focusWorld는 줌을 키우기만 하므로(Math.max), 화면 맞춤에는 계산된 줌을 직접 설정
-  if (f) { R.cam.x = f.x; R.cam.y = f.y; R.cam.z = f.z; R.clamp(); needRefresh = true; }
+  // focusWorld는 줌을 키우기만 하고(Math.max), clamp는 세계 가장자리 근처의 점을 플로터 아래로 밀어 넣으므로
+  // 화면 맞춤에는 계산된 위치·줌을 그대로 설정한다(세계 밖 배경이 잠시 보일 수 있음)
+  if (f) { R.cam.x = f.x; R.cam.y = f.y; R.cam.z = f.z; needRefresh = true; }
   toast('🗺 전쟁이 벌어진 곳을 지도에 표시합니다');
 }
 function hideWarView() {
