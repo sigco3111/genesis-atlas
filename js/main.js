@@ -242,7 +242,13 @@ function layoutFloaters() {
     }
   }
   const tr = $('track');
-  if (tr && !tr.classList.contains('hide')) tr.style.top = (top + 8) + 'px';
+  if (tr && !tr.classList.contains('hide')) {
+    tr.style.top = (top + 8) + 'px';
+    // 아래쪽 권능 사용 중 칩(해제 버튼)까지 가리지 않도록 펼친 카드 높이를 남은 공간으로 제한
+    const chip = $('pwarm');
+    const reserve = chip && !chip.classList.contains('hide') ? 175 : 16;
+    tr.style.maxHeight = Math.max(120, Math.min(window.innerHeight * 0.52, window.innerHeight - (top + 8) - reserve)) + 'px';
+  }
 }
 function hideFloater(el) { el.classList.add('hide'); layoutFloaters(); }
 function touchUI() { return (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || lastPtr === 'touch'; }
