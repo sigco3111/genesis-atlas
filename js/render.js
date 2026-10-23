@@ -487,6 +487,26 @@ export class Renderer {
         const k = Math.round(sm.x / 1.2) + ':' + Math.round(sm.y / 1.2); if (!groups.has(k)) groups.set(k, []); groups.get(k).push([a, sm]);
       }
       if (this.armySm.size > smSeen.size + 40) { for (const id of this.armySm.keys()) if (!smSeen.has(id)) this.armySm.delete(id); }
+      // 행군 경로: 남은 길을 국가 색 점선으로 보여 줘 어디로 치고 가는지 읽히게 한다
+      if (z >= 1.4) {
+        for (const a of S.armies) {
+          if (a.st !== 'march' && a.st !== 'retreat') continue; if (!a.path || a.path.length < 2 || a.prog >= a.dlen) continue;
+          const nn = S.nations[a.nat]; if (!nn) continue; const sm = this.armySm.get(a.id) || a;
+          ctx.save(); ctx.strokeStyle = `rgba(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]},.75)`; ctx.lineWidth = Math.max(1.4, ss * 0.16); ctx.setLineDash([ss * 0.55, ss * 0.45]); ctx.lineDashOffset = -this.time * ss * 2; ctx.lineCap = 'round';
+          ctx.beginPath(); const [sx, sy] = this.w2s(sm.x, sm.y); ctx.moveTo(sx, sy);
+          let acc = 0, started = false;
+          for (let i = 1; i < a.path.length; i++) {
+            const l = Math.hypot(a.path[i][0] - a.path[i - 1][0], a.path[i][1] - a.path[i - 1][1]); acc += l;
+            if (acc >= a.prog) { const [qx, qy] = this.w2s(a.path[i][0], a.path[i][1]); ctx.lineTo(qx, qy); started = true; }
+          }
+          if (started) { ctx.save(); ctx.strokeStyle = 'rgba(10,10,14,.6)'; ctx.lineWidth = Math.max(3.2, ss * 0.34); ctx.setLineDash([]); ctx.stroke(); ctx.restore(); ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = 0.9; ctx.stroke(); ctx.globalAlpha = 1; ctx.strokeStyle = `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})`; ctx.lineWidth = Math.max(1.6, ss * 0.2); ctx.stroke(); }
+          ctx.setLineDash([]);
+          const e = a.path[a.path.length - 1]; const [ex, ey] = this.w2s(e[0], e[1]);
+          ctx.fillStyle = a.st === 'retreat' ? 'rgba(180,180,180,.8)' : `rgba(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]},.9)`; ctx.strokeStyle = 'rgba(10,10,10,.8)'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(ex, ey - ss * 0.55); ctx.lineTo(ex + ss * 0.42, ey); ctx.lineTo(ex, ey + ss * 0.55); ctx.lineTo(ex - ss * 0.42, ey); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.restore();
+        }
+      }
       const items = [];
       for (const arr of groups.values()) {
         for (let gi = 0; gi < arr.length; gi++) {
