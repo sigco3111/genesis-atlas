@@ -7,10 +7,13 @@ const ok = (cond, msg) => { if (!cond) { fails++; console.error('FAIL', msg); } 
 
 // 1) 개전 스냅샷: 참전국(동맹 포함) 인구·지방 수 기록
 {
-  const S = { nations: [{ pop: 1234.6, pc: 7 }, { pop: 500, pc: 3 }, { pop: 42, pc: 1 }] };
+  const S = {
+    P: { owner: [0, 0, 0, 1, 2, -1], pop: [500, 400, 335, 500, 42, 77] },
+    nations: [{ pop: 999999, pc: 99 }, { pop: 1, pc: 1 }, { pop: 2, pc: 2 }],
+  }; // 캐시 집계는 일부러 틀리게: 실제 소유를 직접 세야 함
   const w = { A: [0, 2], D: [1] };
   const s = snapWar(S, w);
-  ok(s[0][0] === 1235 && s[0][1] === 7 && s[1][0] === 500 && s[2][1] === 1, '스냅샷: 동맹 포함 전원 인구 반올림·지방 수 기록');
+  ok(s[0][0] === 1235 && s[0][1] === 3 && s[1][0] === 500 && s[1][1] === 1 && s[2][1] === 1, '스냅샷: 캐시 집계가 아닌 실제 소유 기준 인구·지방 수');
   ok(!('99' in s), '스냅샷: 없는 국가는 무시');
 }
 
@@ -31,8 +34,9 @@ const ok = (cond, msg) => { if (!cond) { fails++; console.error('FAIL', msg); } 
 {
   const S = {
     year: 130,
+    P: { owner: [0, 0, 0, -1, -1], pop: [700, 700, 600, 10, 20] },
     nations: [
-      { name: '알파', rgb: [1, 1, 1], alive: true, pop: 2000, pc: 9 },
+      { name: '알파', rgb: [1, 1, 1], alive: true, pop: 1, pc: 1 }, // 캐시는 일부러 틀리게
       { name: '베타', rgb: [2, 2, 2], alive: false, pop: 0, pc: 0 },
     ],
   };
@@ -43,7 +47,7 @@ const ok = (cond, msg) => { if (!cond) { fails++; console.error('FAIL', msg); } 
   ok(s.dur === 30 && s.win === 'A' && s.y0 === 100 && s.y1 === 130, '요약: 기간·승자·연도');
   ok(s.nm[1] === '베타' && s.now[1][0] === 0 && s.now[1][1] === 0, '요약: 멸망국 이름은 남기고 현재값은 0');
   ok(s.big.length === BIGCAPS_MAX && s.capsA === BIGCAPS_MAX + 5, `요약: 주요 점령은 ${BIGCAPS_MAX}개, 전체 점령 수는 별도 집계`);
-  ok(s.snap[0][1] === 9 && s.now[0][1] === 9, '요약: 개전/종전 영토 스냅샷 유지');
+  ok(s.snap[0][1] === 3 && s.now[0][1] === 3 && s.now[0][0] === 2000, '요약: 개전/종전 영토·인구를 실제 소유로 집계');
 }
 
 // 4) 요약 목록 상한과 deltaOf
@@ -121,6 +125,30 @@ const ok = (cond, msg) => { if (!cond) { fails++; console.error('FAIL', msg); } 
   const n0 = S.warHist.length;
   const S2 = sim.restore(sim.serialize(S));
   ok(S2.warHist.length === n0, '직렬화 왕복: 종전 요약 보존');
+}
+
+// 9) 경계 정합: 종전 당해의 마지막 점령·멸망이 결과에 즉시 반영 (캐시 집계 지연 없음)
+{
+  const map = await loadEarthNode('./data');
+  const S = sim.createState(map, { mode: 'real', seed: 13 });
+  const big = S.nations.filter((n) => n.alive && n.pc > 5);
+  const a = big[0], d = big[1];
+  sim.startWar(S, map, a, d);
+  const w = S.wars[S.wars.length - 1];
+  const sa = w.snap[a.id][1], sd = w.snap[d.id][1];
+  const dq = S.P.owner.findIndex((o) => o === d.id);
+  S.P.owner[dq] = a.id; // 종전 직전 마지막 점령 (올해 집계는 아직 안 돈 상태)
+  sim.endWar(S, map, w, 'A');
+  const s1 = S.warHist[S.warHist.length - 1];
+  ok(s1.now[a.id][1] === sa + 1 && s1.now[d.id][1] === sd - 1, '마지막 점령이 종전 영토에 즉시 반영');
+  const c = big[2], e = big[3];
+  sim.startWar(S, map, c, e);
+  const w2 = S.wars[S.wars.length - 1];
+  const se = w2.snap[e.id][1];
+  for (let p = 0; p < S.P.owner.length; p++) if (S.P.owner[p] === e.id) S.P.owner[p] = c.id; // 멸망 직후 상태
+  sim.endWar(S, map, w2, 'A');
+  const s2 = S.warHist[S.warHist.length - 1];
+  ok(se > 0 && s2.now[e.id][1] === 0 && s2.now[e.id][0] === 0, '멸망 경계: 종전 시점 소유 0을 정확히 반영');
 }
 
 if (fails) { console.error(fails + '개 실패'); process.exit(1); }

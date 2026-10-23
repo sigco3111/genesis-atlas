@@ -4,10 +4,18 @@ export const WARHIST_MAX = 60;   // 보관하는 종전 요약 최대 수 (오�
 export const WARCAPS_MAX = 600;  // 진행 중 전쟁이 기억하는 점령 기록 최대 수
 export const BIGCAPS_MAX = 12;   // 요약에 남기는 주요 점령(수도·대도시) 최대 수
 
+// 전쟁 경계 시점의 실제 영토·인구: 캐시된 연도 집계(n.pc/n.pop)가 아니라 지방 배열을 직접 세어
+// 개전·종전 당해의 점령까지 정확히 반영한다
+export function liveStats(S, id) {
+  const P = S.P; let pop = 0, pc = 0;
+  for (let p = 0; p < P.owner.length; p++) if (P.owner[p] === id) { pc++; pop += P.pop[p]; }
+  return [Math.round(pop), pc];
+}
+
 // 개전 시점 참전국 인구·영토 스냅샷: { 국가id: [인구, 지방 수] }
 export function snapWar(S, w) {
   const snap = {};
-  for (const id of [...w.A, ...w.D]) { const n = S.nations[id]; if (n) snap[id] = [Math.round(n.pop || 0), n.pc || 0]; }
+  for (const id of [...w.A, ...w.D]) { const n = S.nations[id]; if (n) snap[id] = liveStats(S, id); }
   return snap;
 }
 
@@ -36,7 +44,7 @@ export function buildSummary(S, w, winner) {
   for (const id of [...A0, ...D0]) {
     const n = S.nations[id]; if (!n) continue;
     nm[id] = n.name; rgb[id] = n.rgb;
-    now[id] = n.alive ? [Math.round(n.pop || 0), n.pc || 0] : [0, 0];
+    now[id] = liveStats(S, id); // 멸망국은 소유 지방이 없어 자연히 [0, 0]
   }
   const [capsA, capsD] = capsBySide(w);
   const big = (w.caps || []).filter((c) => c.big).slice(-BIGCAPS_MAX).map((c) => ({ q: c.q, f: c.f, t: c.t, y: c.y }));
