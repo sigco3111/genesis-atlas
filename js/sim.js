@@ -77,7 +77,7 @@ export function newNation(S, map, p, name, cult, tech = 0) {
   const n = {
     id, name: name || genName(lang, rng, 'nation'), rgb: hslToRgb(hue, rng.range(52, 72), rng.range(50, 60)), cap: p, cult, rel: S.P.rel[p],
     gov: '부족', born: S.year, alive: true, died: null, stab: 0.7, lead: newLeader(S, lang), allies: [], pc: 0, pop: 0, tech: 0, mil: 0, lx: 0, ly: 0,
-    peakPop: 0, peakPc: 0, era: 0, relat: {}, exh: 0, gdp: 0, trade: 0, wins: 0, losses: 0, hist: [[S.year, 0, 0]],
+    peakPop: 0, peakPc: 0, era: 0, relat: {}, exh: 0, gdp: 0, trade: 0, wins: 0, losses: 0, hist: [],
   };
   S.nations.push(n); return n;
 }
@@ -245,6 +245,7 @@ export function step(S, map) {
   stepProvinces(S, map);
   if (S.year % 2 === 0 || !S.fr) computeFronts(S, map);
   aggregate(S, map);
+  for (const n of S.nations) if (n.alive && n.hist && !n.hist.length) n.hist.push([S.year, Math.round(n.pop), n.pc]);
   sampleTrack(S);
   stepNations(S, map);
   stepWars(S, map);

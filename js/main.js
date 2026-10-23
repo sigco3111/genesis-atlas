@@ -337,14 +337,15 @@ function renderPanel(auto) {
       h += row('영토', A.pc + ' 지방', B.pc + ' 지방', A.pc, B.pc);
       h += row('안정도', Math.round(A.stab * 100) + '%', Math.round(B.stab * 100) + '%', A.stab, B.stab);
       h += row('기술', A.tech.toFixed(2) + ' · ' + ERA_NAMES[Math.min(9, Math.floor(A.tech))], B.tech.toFixed(2) + ' · ' + ERA_NAMES[Math.min(9, Math.floor(B.tech))], A.tech, B.tech);
-      h += row('군사력 추정', numStr(A.mil), numStr(B.mil), A.mil, B.mil);
+      const milTot = Math.max(1, S.nations.filter((n) => n.alive).reduce((t, n) => t + n.mil, 0));
+      h += row('군사력', `세계의 ${(A.mil / milTot * 100).toFixed(1)}%`, `세계의 ${(B.mil / milTot * 100).toFixed(1)}%`, A.mil, B.mil);
       const wr = (n) => (n.wins + n.losses) ? ' <small>승률 ' + Math.round(n.wins / (n.wins + n.losses) * 100) + '%</small>' : '';
       h += row('전적', `${A.wins}승 ${A.losses}패${wr(A)}`, `${B.wins}승 ${B.losses}패${wr(B)}`, A.wins, B.wins);
       const age = (n) => Math.max(1, (n.alive ? S.year : n.died) - n.born);
       h += row('건국', `${yearStr(A.born)} <small>${age(A)}년째</small>`, `${yearStr(B.born)} <small>${age(B)}년째</small>`, null, null);
       h += row('지도자', `${A.lead.name} <small>${sim.traitText(A.lead)}</small>`, `${B.lead.name} <small>${sim.traitText(B.lead)}</small>`, null, null);
       h += '<h3>인구 추이 비교</h3><canvas id="cmpSpark" width="300" height="96"></canvas>';
-      const gr = (n) => { const hs = n.hist || []; if (hs.length < 2 || !hs[0][1]) return null; return Math.round((hs[hs.length - 1][1] / hs[0][1] - 1) * 100); };
+      const gr = (n) => { const hs = (n.hist || []).filter((x) => x[1] > 0); if (hs.length < 2) return null; return Math.round((hs[hs.length - 1][1] / hs[0][1] - 1) * 100); };
       const gt = (g) => g == null ? '<em>기록 시작</em>' : `<em class="${g >= 0 ? 'up' : 'down'}">${g >= 0 ? '+' : ''}${g}%</em>`;
       const ha0 = (A.hist || [])[0], hb0 = (B.hist || [])[0];
       const since = Math.min(ha0 ? ha0[0] : S.year, hb0 ? hb0[0] : S.year);
