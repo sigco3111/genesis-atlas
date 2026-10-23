@@ -176,7 +176,7 @@ function siegeTick(S, map, a, w) {
   const ea = eraOf(S.nations[a.nat]), ed = eraOf(S.nations[ow]);
   const engine = ea >= 7 ? 1.55 : ea >= 5 ? 1.3 : ea >= 3 ? 1.12 : 1;
   const wall = 1 + Math.max(0, P.city[q] - 1) * 0.12 * (ed >= ea ? 1 : 0.6);
-  a.sg += a.men / (2600 * need) * (cmdTrait(a) === 1 ? 1.3 : 1) * engine / wall;
+  a.sg += Math.max(a.men, 1000) / (2600 * need) * (cmdTrait(a) === 1 ? 1.3 : 1) * engine / wall; // 소규모 부족군도 몇 해 안에 결판이 나도록 하한을 둔다
   // 농성군의 출격: 큰 도시일수록 포위군에 작은 피해를 준다
   if (P.city[q] >= 2) { const sortie = a.men * 0.006 * (P.city[q] - 1); a.men -= sortie; S.deaths.war += sortie; }
   const attr = a.men * 0.03 * (2 - supplyOf(map, a)); a.men -= attr; S.deaths.war += attr;
