@@ -7,12 +7,12 @@ export const VERSION = 1;
 const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
 
 export const POWERS = {
-  bless: { name: '풍요의 비', desc: '선택 지역과 인접 지역의 땅이 수십 년간 기름져집니다.' },
-  drought: { name: '가뭄', desc: '지역에 대가뭄을 내립니다. 인구와 안정도가 흔들립니다.' },
-  plague: { name: '역병', desc: '지역에 역병을 퍼뜨립니다. 이웃으로 번집니다.' },
-  quake: { name: '지진', desc: '지역과 도시에 피해를 줍니다.' },
-  volcano: { name: '화산 폭발', desc: '큰 피해를 주지만 이후 땅이 비옥해집니다.' },
-  meteor: { name: '운석', desc: '지역 전체를 강타합니다. 인접 지역도 큰 피해를 입습니다.' },
+  bless: { name: '풍요의 비', desc: '좁은 지역에 강한 축복: 땅이 기름지고 인구가 바로 늘어납니다.' },
+  drought: { name: '가뭄', desc: '넓은 지역에 얕고 긴 가뭄을 내려 성장이 오래 둔화됩니다.' },
+  plague: { name: '역병', desc: '한 지점에서 시작해 이웃으로 번져 나가는 역병을 퍼뜨립니다.' },
+  quake: { name: '지진', desc: '도시를 집중 타격합니다. 인구보다 도시가 크게 무너집니다.' },
+  volcano: { name: '화산 폭발', desc: '중심에 큰 피해를 주지만 주변 땅이 비옥해집니다.' },
+  meteor: { name: '운석', desc: '한 지방을 거의 지우고 주변에 큰 피해를 줍니다. 흉터가 오래 남습니다.' },
   tribe: { name: '새 부족 탄생', desc: '사람이 없는 빈 땅에 새 부족을 내려보냅니다.' },
   prophet: { name: '예언자', desc: '지역에 새 신앙을 일으키고 주변으로 퍼뜨립니다.' },
   hero: { name: '영웅 강림', desc: '해당 국가에 영웅이 나타나 안정도와 학문이 오릅니다.' },
@@ -522,11 +522,11 @@ export function disaster(S, map, kind, p) {
   if (p < 0) return; const P = S.P, prv = map.provinces; const ow = P.owner[p]; const nm = S.provName[p] || '한 지방'; const nbs = prv[p].land;
   const hit = (q, f) => { const d = P.pop[q] * f; P.pop[q] -= d; S.deaths.famine += d; };
   const info = ow >= 0 ? ` (${S.nations[ow].name})` : '';
-  if (kind === 'quake') { hit(p, 0.18); if (P.city[p] > 0 && S.rng.chance(0.5)) P.city[p]--; if (P.pop[p] > 300) addLog(S, `${nm}에 대지진이 일어났습니다.${info}`, 2, p, ow); }
+  if (kind === 'quake') { hit(p, 0.12); if (P.city[p] > 0) P.city[p] = Math.max(0, P.city[p] - 2); if (P.pop[p] > 300) addLog(S, `${nm}에 대지진이 일어났습니다.${info}`, 2, p, ow); }
   else if (kind === 'volcano') { hit(p, 0.45); for (const q of nbs) hit(q, 0.1); P.fx[p] = 1.5; if (P.city[p] > 0) P.city[p]--; if (P.pop[p] > 100) addLog(S, `${nm}의 화산이 폭발했습니다.${info}`, 2, p, ow); }
   else if (kind === 'flood') { hit(p, 0.1); for (const q of nbs) if (S.rng.chance(0.5)) hit(q, 0.06); if (P.pop[p] > 800) addLog(S, `${nm} 일대에 대홍수가 났습니다.${info}`, 1, p, ow); }
-  else if (kind === 'drought') { P.fx[p] = 0.35; for (const q of nbs) P.fx[q] = Math.min(P.fx[q], 0.55); if (P.pop[p] > 1500) addLog(S, `${nm} 일대에 대가뭄이 들었습니다.${info}`, 2, p, ow); if (ow >= 0) S.nations[ow].stab -= 0.04; }
-  else if (kind === 'bless') { P.fx[p] = 1.6; for (const q of nbs) P.fx[q] = Math.max(P.fx[q], 1.35); addLog(S, `신의 풍요가 ${nm} 일대에 내렸습니다.`, 1, p, ow); }
+  else if (kind === 'drought') { P.fx[p] = Math.min(P.fx[p], 0.5); const r2 = new Set(); for (const q of nbs) { P.fx[q] = Math.min(P.fx[q], 0.65); for (const r of prv[q].land) if (r >= 0 && r !== p && !nbs.includes(r)) r2.add(r); } for (const r of r2) P.fx[r] = Math.min(P.fx[r], 0.8); if (P.pop[p] > 1500) addLog(S, `${nm} 일대에 대가뭄이 들었습니다.${info}`, 2, p, ow); if (ow >= 0) S.nations[ow].stab -= 0.04; }
+  else if (kind === 'bless') { P.fx[p] = 1.6; P.pop[p] *= 1.06; for (const q of nbs) { P.fx[q] = Math.max(P.fx[q], 1.35); P.pop[q] *= 1.03; } addLog(S, `신의 풍요가 ${nm} 일대에 내렸습니다.`, 1, p, ow); }
   else if (kind === 'meteor') { hit(p, 0.8); for (const q of nbs) hit(q, 0.3); P.city[p] = 0; P.fx[p] = 0.6; addLog(S, `${nm}에 거대한 운석이 떨어졌습니다!${info}`, 3, p, ow); }
   S.fxQueue.push([p, kind]);
 }
@@ -539,35 +539,36 @@ export function powerArea(S, map, type, p) {
   if (p == null || p < 0 || !map.provinces[p]) return { ok: false, msg: '지도의 육지를 누르세요', provs: [] };
   const P = S.P, ow = P.owner[p];
   const near = (map.provinces[p].land || []).filter((q) => q >= 0);
+  const near2 = [...new Set(near.flatMap((q) => map.provinces[q].land || []))].filter((q) => q >= 0 && q !== p && !near.includes(q));
   const nationProvs = (id) => { const out = []; for (let q = 0; q < P.owner.length; q++) if (P.owner[q] === id) out.push(q); return out; };
   const noNation = { ok: false, msg: '국가가 있는 땅에서 쓰세요', provs: [p] };
   switch (type) {
-    case 'bless': return { ok: true, provs: [p, ...near], expect: '땅이 수십 년간 기름져져 인구가 잘 늘어납니다' };
-    case 'drought': return { ok: true, provs: [p, ...near], expect: '대가뭄: 성장 둔화' + (ow >= 0 ? ' · ' + S.nations[ow].name + ' 안정도 하락' : '') };
-    case 'quake': return { ok: true, provs: [p], expect: '인구 약 -18%' + (P.city[p] ? ' · 도시 피해 가능' : '') };
-    case 'volcano': return { ok: true, provs: [p, ...near], expect: '중심 인구 약 -45% · 인접 약 -10% · 이후 비옥해짐' };
-    case 'meteor': return { ok: true, provs: [p, ...near], expect: '중심 인구 약 -80% · 도시 파괴 · 인접 약 -30%' };
-    case 'plague': return P.pop[p] < 10 ? { ok: false, msg: '사람이 살지 않는 곳입니다', provs: [p] } : { ok: true, provs: [p], expect: '역병 발병 · 이웃으로 번질 수 있습니다' };
-    case 'tribe': return (P.pop[p] > 5 || map.provinces[p].fert < 0.05) ? { ok: false, msg: '사람이 없는 비옥한 땅에서만 쓸 수 있습니다', provs: [p] } : { ok: true, provs: [p], expect: '새 부족이 국가를 세웁니다' };
-    case 'prophet': return P.pop[p] < 10 ? { ok: false, msg: '사람이 없는 곳입니다', provs: [p] } : { ok: true, provs: [p, ...near.filter((q) => P.pop[q] > 5)], expect: '새 신앙이 일어나 주변으로 퍼집니다' };
-    case 'hero': return ow < 0 ? noNation : { ok: true, provs: nationProvs(ow), nation: ow, expect: S.nations[ow].name + ' 전체: 안정도 상승 · 불안 감소 · 학문 상승' };
+    case 'bless': return { ok: true, provs: [p, ...near], shape: 'cluster', expect: '인구가 바로 조금 늘고 땅이 수십 년간 기름져집니다' };
+    case 'drought': return { ok: true, provs: [p, ...near, ...near2], shape: 'wide', expect: '넓은 범위에 얕고 긴 가뭄: 성장이 오래 둔화' + (ow >= 0 ? ' · ' + S.nations[ow].name + ' 안정도 소폭 하락' : '') };
+    case 'quake': return { ok: true, provs: [p], shape: 'spot', expect: (P.city[p] ? '도시 최대 2단계 붕괴 · ' : '도시 없음 · ') + '인구 약 -12%' };
+    case 'volcano': return { ok: true, provs: [p, ...near], shape: 'cluster', expect: '중심 인구 약 -45% · 인접 약 -10% · 이후 주변이 비옥해짐' };
+    case 'meteor': return { ok: true, provs: [p, ...near], shape: 'cluster', expect: '중심 인구 약 -80% · 도시 전멸 · 인접 약 -30% · 흉터가 오래 남음' };
+    case 'plague': return P.pop[p] < 10 ? { ok: false, msg: '사람이 살지 않는 곳입니다', provs: [p] } : { ok: true, provs: [p], shape: 'spot', expect: '역병 발병 · 이웃으로 번질 수 있습니다' };
+    case 'tribe': return (P.pop[p] > 5 || map.provinces[p].fert < 0.05) ? { ok: false, msg: '사람이 없는 비옥한 땅에서만 쓸 수 있습니다', provs: [p] } : { ok: true, provs: [p], shape: 'spot', expect: '새 부족이 국가를 세웁니다' };
+    case 'prophet': return P.pop[p] < 10 ? { ok: false, msg: '사람이 없는 곳입니다', provs: [p] } : { ok: true, provs: [p, ...near.filter((q) => P.pop[q] > 5)], shape: 'cluster', expect: '새 신앙이 일어나 주변으로 퍼집니다' };
+    case 'hero': return ow < 0 ? noNation : { ok: true, provs: nationProvs(ow), nation: ow, shape: 'nation', expect: S.nations[ow].name + ' 전체: 안정도 상승 · 불안 감소 · 학문 상승' };
     case 'revolt': {
       if (ow < 0) return noNation;
       const n = S.nations[ow];
       if (n.pc < 2 || n.cap === p) return { ok: false, msg: '수도나 단일 지방 국가에는 쓸 수 없습니다', provs: [p], nation: ow };
-      return { ok: true, provs: [p], nation: ow, expect: (S.provName[p] || '이 지방') + '의 독립을 부추깁니다' };
+      return { ok: true, provs: [p], nation: ow, shape: 'spot', expect: (S.provName[p] || '이 지방') + '의 독립을 부추깁니다' };
     }
     case 'peace': {
       if (ow < 0) return noNation;
       const ws = S.wars.filter((w) => w.A.includes(ow) || w.D.includes(ow));
       if (!ws.length) return { ok: false, msg: '전쟁 중이 아닙니다', provs: nationProvs(ow), nation: ow };
-      return { ok: true, provs: nationProvs(ow), nation: ow, expect: S.nations[ow].name + '의 전쟁 ' + ws.length + '건을 끝냅니다' };
+      return { ok: true, provs: nationProvs(ow), nation: ow, shape: 'nation', expect: S.nations[ow].name + '의 전쟁 ' + ws.length + '건을 끝냅니다' };
     }
     case 'war': {
       if (ow < 0) return noNation;
       const n = S.nations[ow]; const nb = [...neighborsOf(S, n).keys()];
       if (!nb.length) return { ok: false, msg: '이웃 국가가 없습니다', provs: nationProvs(ow), nation: ow };
-      return { ok: true, provs: nationProvs(ow), nation: ow, expect: n.name + '이(가) 이웃 ' + nb.length + '개국 중 하나와 전쟁을 시작합니다' };
+      return { ok: true, provs: nationProvs(ow), nation: ow, shape: 'nation', expect: n.name + '이(가) 이웃 ' + nb.length + '개국 중 하나와 전쟁을 시작합니다' };
     }
   }
   return { ok: false, msg: '알 수 없는 권능', provs: [p] };
@@ -603,6 +604,7 @@ export function applyPower(S, map, type, p) {
     case 'peace': { if (needNation()) break; const ws = S.wars.filter((w) => w.A.includes(ow) || w.D.includes(ow)); if (!ws.length) { ok = false; msg = '전쟁 중이 아닙니다'; break; } for (const w of ws) endWar(S, map, w, ''); addLog(S, `평화의 신탁이 내려 ${S.nations[ow].name}의 전쟁이 멈췄습니다.`, 2, p, ow); break; }
     case 'war': { if (needNation()) break; const n = S.nations[ow]; const nb = [...neighborsOf(S, n).keys()]; if (!nb.length) { ok = false; msg = '이웃 국가가 없습니다'; break; } const m = S.nations[S.rng.pick(nb)]; n.relat[m.id] = -90; m.relat[n.id] = -90; delete S.truce[tkey(n.id, m.id)]; startWar(S, map, n, m, '(신의 속삭임)'); break; }
   }
+  if (ok && !['bless', 'drought', 'quake', 'volcano', 'meteor', 'flood', 'plague'].includes(type)) S.fxQueue.push([p, type === 'war' ? 'warshout' : type]);
   // --- 발동 후 차이 계산 ---
   const diff = { provs: [], popLost: 0, popGained: 0, citiesLost: 0, nations: [], events: [], warsDelta: S.wars.length - wars0 };
   for (const [q, b] of prov0) {

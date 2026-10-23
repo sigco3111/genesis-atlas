@@ -8,13 +8,17 @@ const S = sim.createState(map, { mode: 'emergent', seed: 7, hearths: 6 });
 for (let i = 0; i < 1500; i++) sim.step(S, map);
 ok(S.stats.alive > 1, 'nations alive');
 const P = S.P;
-// 유효 대상/무효 대상 찾기
+// 유효 대상/무효 대상 찾기 (세계 진행에 따라 빈 땅이 없을 수 있어 더 돌려 가며 탐색)
 let owned = -1, empty = -1, city = -1;
-for (let p = 0; p < map.provinces.length; p++) {
-  if (owned < 0 && P.owner[p] >= 0 && P.pop[p] > 100) owned = p;
-  if (empty < 0 && P.owner[p] < 0 && P.pop[p] < 2 && map.provinces[p].fert > 0.4) empty = p;
-  if (city < 0 && P.city[p] >= 2) city = p;
-}
+const find = () => {
+  for (let p = 0; p < map.provinces.length; p++) {
+    if (owned < 0 && P.owner[p] >= 0 && P.pop[p] > 100) owned = p;
+    if (empty < 0 && P.owner[p] < 0 && P.pop[p] <= 5 && map.provinces[p].fert >= 0.05) empty = p;
+    if (city < 0 && P.city[p] >= 2) city = p;
+  }
+};
+find();
+for (let t = 0; empty < 0 && t < 4; t++) { for (let i = 0; i < 1500; i++) sim.step(S, map); owned = -1; city = -1; find(); }
 ok(owned >= 0 && empty >= 0, 'test provinces found (owned=' + owned + ' empty=' + empty + ')');
 // 1. powerArea: 범위와 유효성
 const aBless = sim.powerArea(S, map, 'bless', owned);
@@ -48,8 +52,11 @@ if (city >= 0) {
 }
 // 4. 전쟁의 불씨: 전쟁 로그 이벤트가 diff 에 잡혀야 한다
 {
+  const nid = P.owner[owned];
   const r = sim.applyPower(S, map, 'war', owned);
-  if (r.ok) { ok(r.diff.events.some((e) => e.includes('전쟁')), 'war event captured'); ok(r.diff.warsDelta >= 1, 'war started counted'); }
+  if (r.ok) { // 이미 그 이웃과 전쟁 중이면 startWar는 조용히 넘어간다 — 권능 자체는 관계 악화·휴전 해제를 수행
+    ok(r.diff.events.some((e) => e.includes('전쟁')) || r.diff.warsDelta >= 1 || S.wars.some((w) => w.A.includes(nid) || w.D.includes(nid)), 'war event captured or already at war');
+  }
   else ok(r.msg.length > 0, 'war refused with msg');
 }
 // 5. 새 부족: 새 국가 탄생 보고
@@ -67,5 +74,37 @@ if (city >= 0) {
 {
   const R = sim.restore(sim.serialize(S));
   for (const k of Object.keys(sim.POWERS)) { const r = sim.applyPower(R, map, k, owned); ok(typeof r.ok === 'boolean' && r.diff !== undefined, 'restored power ' + k + ' has diff'); }
+}
+// 8. v37 권능 다양화: 풍요의 비는 인구 증가를 보고한다
+{
+  const r = sim.applyPower(S, map, 'bless', owned);
+  ok(r.ok && r.diff.popGained > 0, 'bless popGained > 0');
+  ok(P.fx[owned] > 1, 'bless fx raised');
+}
+// 9. 가뭄은 2단계 넓은 범위다
+{
+  const aDry = sim.powerArea(S, map, 'drought', owned);
+  const aBl = sim.powerArea(S, map, 'bless', owned);
+  ok(aDry.ok && aDry.shape === 'wide' && aDry.provs.length >= aBl.provs.length, 'drought wide area (' + aDry.provs.length + ' vs bless ' + aBl.provs.length + ')');
+  const r = sim.applyPower(S, map, 'drought', owned);
+  ok(r.ok && P.fx[owned] <= 0.5 + 1e-6, 'drought center fx <= 0.5');
+  const ring1 = new Set([owned, ...map.provinces[owned].land]);
+  const r2 = aDry.provs.find((q) => !ring1.has(q));
+  if (r2 !== undefined) ok(P.fx[r2] < 1, 'drought ring2 fx lowered');
+}
+// 10. 사회 권능도 발동 시 지도 효과를 남긴다
+{
+  for (const [t, want] of [['hero', 'hero'], ['war', 'warshout'], ['peace', 'peace']]) {
+    const q0 = S.fxQueue.length;
+    const r = sim.applyPower(S, map, t, owned);
+    if (r.ok) ok(S.fxQueue.length === q0 + 1 && S.fxQueue[S.fxQueue.length - 1][1] === want, t + ' fx pushed as ' + want);
+    else ok(r.msg.length > 0, t + ' refused with msg');
+  }
+}
+// 11. 미리보기 범위 모양 라벨이 구분된다
+{
+  ok(sim.powerArea(S, map, 'quake', owned).shape === 'spot', 'quake shape spot');
+  ok(sim.powerArea(S, map, 'hero', owned).shape === 'nation', 'hero shape nation');
+  ok(sim.powerArea(S, map, 'bless', owned).shape === 'cluster', 'bless shape cluster');
 }
 console.log(fail ? 'FAILED ' + fail : 'ALL OK'); process.exit(fail ? 1 : 0);

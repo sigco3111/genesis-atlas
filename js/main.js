@@ -176,7 +176,7 @@ function loop(t) { if (!loop.n) console.log('loop1'); loop.n = (loop.n || 0) + 1
     if (n) needRefresh = true;
     if (S.auto && n) for (let i = 0; i < Math.min(n, 3); i++) sim.autoGod(S, map);
   }
-  for (const f of S.fxQueue.splice(0)) if (speed < 20) R.addEffect(f[0], f[1], f[1] === 'war' ? '#ff5050' : f[1] === 'plague' ? '#9be26a' : '#ffd27a');
+  for (const f of S.fxQueue.splice(0)) if (speed < 20) R.addEffect(f[0], f[1]);
   if (S.log.length) { const lg = S.log; let i = lg.length - 1; while (i >= 0 && lg[i] !== loop.lastLog) i--; const fresh = i < 0 ? lg.slice(-1) : lg.slice(i + 1); loop.lastLog = lg[lg.length - 1];
     if (speed <= 100 && t - (loop.tt || 0) > 2500) { const big = fresh.filter((l) => l.i >= 3).pop(); if (big) { loop.tt = t; toast(yearStr(big.y) + ' · ' + big.t); } } }
   if (S && S.track) {
@@ -311,7 +311,7 @@ function updatePowerPreview(p) {
   const a = sim.powerArea(S, map, selPower, p);
   R.setPowerPreview({ center: p, provs: a.provs, color: powerColor(selPower, a.ok) });
   const nm = S.provName[p] || '이름 없는 땅';
-  const scope = a.nation != null ? S.nations[a.nation].name + ' 전체 (' + a.provs.length + '지방)' : a.provs.length > 1 ? '중심+인접 ' + a.provs.length + '곳' : '1개 지방';
+  const scope = a.shape === 'nation' && a.nation != null ? S.nations[a.nation].name + ' 전체 (' + a.provs.length + '지방)' : a.shape === 'wide' ? '넓은 범위 ' + a.provs.length + '곳' : a.shape === 'cluster' ? '중심+인접 ' + a.provs.length + '곳' : '1개 지방';
   const pend = pwPending && pwPending.p === p && pwPending.type === selPower;
   const label = `<b>${PW_ICON[selPower] || ''} ${sim.POWERS[selPower].name}</b> → ${nm}`;
   let h;

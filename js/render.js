@@ -392,14 +392,201 @@ export class Renderer {
     // 효과
     for (let i = this.effects.length - 1; i >= 0; i--) {
       const e = this.effects[i]; e.t += this.lastDt || 1 / 60; if (e.t > 2.4) { this.effects.splice(i, 1); continue; }
-      const [x, y] = this.w2s(e.x, e.y); const k = e.t / 2.4;
-      ctx.globalAlpha = 1 - k; ctx.strokeStyle = e.color; ctx.lineWidth = 3 * (1 - k) + 1; ctx.beginPath(); ctx.arc(x, y, 6 + k * 46 * Math.min(2, 0.6 + z * 0.3), 0, 7); ctx.stroke();
-      ctx.beginPath(); ctx.arc(x, y, 3 + k * 20, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
+      const [x, y] = this.w2s(e.x, e.y);
+      drawFx(ctx, e, x, y, z, this.time);
     }
     // 비네트
     const g = ctx.createRadialGradient(this.cssW / 2, this.cssH / 2, Math.min(this.cssW, this.cssH) * 0.45, this.cssW / 2, this.cssH / 2, Math.max(this.cssW, this.cssH) * 0.8);
     g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,8,20,.42)'); ctx.fillStyle = g; ctx.fillRect(0, 0, this.cssW, this.cssH);
   }
+}
+// 권능·재해 발동 효과: 종류별로 구분되는 모양으로 그린다.
+const FX_STYLE = {
+  bless: { c: '#7fd4ff' }, drought: { c: '#e8b04b' }, plague: { c: '#9be26a' },
+  quake: { c: '#241c12', dust: '#d8cdb4' }, volcano: { c: '#ff7a3c' }, meteor: { c: '#ffd27a' },
+  flood: { c: '#6fb7ff' }, tribe: { c: '#b8e986' }, prophet: { c: '#ffd76a' },
+  hero: { c: '#ffd24a' }, revolt: { c: '#ff6a3c' }, peace: { c: '#bfe3ff' },
+  war: { c: '#ff5050' }, warshout: { c: '#ff3b30' },
+};
+function drawFx(ctx, e, x, y, z, time) {
+  const k = e.t / 2.4, a = 1 - k;
+  const u = Math.min(2, 0.6 + z * 0.3);
+  const st = FX_STYLE[e.kind] || { c: e.color || '#fff' };
+  const rnd = (n) => { const v = Math.sin(e.x * 12.9898 + e.y * 78.233 + n * 37.719) * 43758.5453; return v - Math.floor(v); };
+  const ring = (r, w, col) => { ctx.globalAlpha = a; ctx.strokeStyle = col || st.c; ctx.lineWidth = Math.max(1, w); ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.stroke(); };
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  switch (e.kind) {
+    case 'bless': { // 비줄기가 내려 땅을 적심
+      ring((6 + k * 34) * u, 2.5 * a + 0.5);
+      ctx.strokeStyle = st.c; ctx.lineWidth = Math.max(1, 1.6 * u);
+      for (let n = 0; n < 16; n++) {
+        const sx = x + (rnd(n) - 0.5) * 64 * u;
+        const sy = y - 44 * u + ((k * 1.6 + rnd(n + 31)) % 1) * 60 * u;
+        ctx.globalAlpha = a * (0.5 + rnd(n + 13) * 0.5);
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, sy + 7 * u); ctx.stroke();
+      }
+      break;
+    }
+    case 'drought': { // 넓게 퍼지는 누런 아지랑이
+      ctx.globalAlpha = a * 0.5; ring((14 + k * 95) * u, 3); ring((6 + k * 55) * u, 2);
+      ctx.fillStyle = st.c;
+      for (let n = 0; n < 10; n++) {
+        const ang = rnd(n) * 6.283, rr = (20 + rnd(n + 5) * 55 + k * 30) * u;
+        ctx.globalAlpha = a * 0.35;
+        ctx.beginPath(); ctx.arc(x + Math.cos(ang) * rr, y + Math.sin(ang) * rr * 0.6, (2 + rnd(n + 9) * 2.5) * u, 0, 7); ctx.fill();
+      }
+      break;
+    }
+    case 'plague': { // 피어오르는 녹색 입자
+      ring((5 + k * 26) * u, 2 * a + 0.5);
+      ctx.fillStyle = st.c;
+      for (let n = 0; n < 12; n++) {
+        const bx = x + (rnd(n) - 0.5) * 46 * u;
+        const by = y + 16 * u - ((k * 1.3 + rnd(n + 7)) % 1) * 52 * u;
+        ctx.globalAlpha = a * (0.4 + rnd(n + 3) * 0.5);
+        ctx.beginPath(); ctx.arc(bx, by, (1.6 + rnd(n + 11) * 2.2) * u, 0, 7); ctx.fill();
+      }
+      break;
+    }
+    case 'quake': { // 지면 균열 + 먼지 파동
+      const g = Math.min(1, k * 2.2);
+      for (let n = 0; n < 6; n++) {
+        let cx = x, cy = y, ang = rnd(n) * 6.283;
+        const pts = [[cx, cy]];
+        const segs = 3 + (n % 2);
+        for (let sg = 0; sg < segs; sg++) {
+          ang += (rnd(n * 7 + sg) - 0.5) * 1.15;
+          const L = (13 + rnd(n + sg * 3) * 13) * u * (0.4 + g * 0.6);
+          cx += Math.cos(ang) * L; cy += Math.sin(ang) * L; pts.push([cx, cy]);
+        }
+        ctx.globalAlpha = a * 0.4; ctx.strokeStyle = st.dust; ctx.lineWidth = Math.max(3, 6 * u);
+        ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (const q of pts) ctx.lineTo(q[0], q[1]); ctx.stroke();
+        ctx.globalAlpha = Math.min(1, a * 1.5); ctx.strokeStyle = st.c; ctx.lineWidth = Math.max(1.8, 3.2 * u);
+        ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (const q of pts) ctx.lineTo(q[0], q[1]); ctx.stroke();
+      }
+      ctx.globalAlpha = a * 0.6; ctx.strokeStyle = st.dust; ctx.lineWidth = Math.max(1, 2 * u * a);
+      ctx.beginPath(); ctx.arc(x, y, (5 + Math.min(1, k * 2.5) * 34) * u, 0, 7); ctx.stroke();
+      break;
+    }
+    case 'volcano': { // 분출 기둥 + 불꽃 입자
+      const hgt = 70 * u * (0.5 + k * 0.5);
+      const gr = ctx.createLinearGradient(0, y - hgt, 0, y);
+      gr.addColorStop(0, 'rgba(255,180,80,0)'); gr.addColorStop(1, 'rgba(255,110,50,' + (0.85 * a) + ')');
+      ctx.globalAlpha = 1; ctx.fillStyle = gr;
+      ctx.beginPath(); ctx.moveTo(x - 11 * u * (1 - k * 0.5), y); ctx.lineTo(x - 2 * u, y - hgt); ctx.lineTo(x + 2 * u, y - hgt); ctx.lineTo(x + 11 * u * (1 - k * 0.5), y); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = st.c;
+      for (let n = 0; n < 10; n++) {
+        const ex = x + (rnd(n) - 0.5) * 30 * u;
+        const ey = y - ((k * 1.5 + rnd(n + 4)) % 1) * 66 * u;
+        ctx.globalAlpha = a * 0.9;
+        ctx.beginPath(); ctx.arc(ex, ey, (1.4 + rnd(n + 8) * 1.8) * u, 0, 7); ctx.fill();
+      }
+      ring((8 + k * 40) * u, 2.5 * a + 0.5);
+      break;
+    }
+    case 'meteor': { // 낙하 궤적 → 섬광 + 큰 충격파
+      if (k < 0.28) {
+        const t2 = k / 0.28;
+        ctx.save(); ctx.shadowColor = '#ffe9a8'; ctx.shadowBlur = 12 * u;
+        ctx.globalAlpha = 1; ctx.strokeStyle = '#fff3c4'; ctx.lineWidth = Math.max(1.5, 3 * u);
+        ctx.beginPath(); ctx.moveTo(x - 60 * u * (1 - t2), y - 74 * u * (1 - t2)); ctx.lineTo(x, y); ctx.stroke();
+        ctx.restore();
+        ctx.globalAlpha = Math.min(1, t2 * 2) * 0.9; ctx.fillStyle = st.c;
+        ctx.beginPath(); ctx.arc(x, y, (3 + t2 * 8) * u, 0, 7); ctx.fill();
+      } else {
+        const t2 = (k - 0.28) / 0.72;
+        ctx.globalAlpha = (1 - t2) * 0.85; ctx.fillStyle = st.c;
+        ctx.beginPath(); ctx.arc(x, y, (10 + t2 * 26) * u, 0, 7); ctx.fill();
+        ring((12 + t2 * 95) * u, 3.5 * (1 - t2) + 0.5); ring((6 + t2 * 55) * u, 2);
+      }
+      break;
+    }
+    case 'flood': { // 물결선
+      ring((6 + k * 45) * u, 2.5 * a + 0.5);
+      ctx.strokeStyle = st.c; ctx.lineWidth = Math.max(1, 1.5 * u);
+      for (let n = 0; n < 3; n++) {
+        const wy = y - 10 * u + n * 10 * u + Math.sin(time * 6 + n) * 2 * u;
+        ctx.globalAlpha = a * 0.7;
+        ctx.beginPath();
+        for (let sg = 0; sg <= 8; sg++) { const wx = x - 28 * u + sg * 7 * u; const yy = wy + Math.sin(sg * 1.3 + time * 8 + n) * 2.5 * u; sg ? ctx.lineTo(wx, yy) : ctx.moveTo(wx, yy); }
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'tribe': { // 솟아오르는 오두막 + 불꽃빛
+      const s2 = Math.min(1, k * 2.2);
+      ctx.globalAlpha = Math.min(1, a * 1.6); ctx.fillStyle = st.c;
+      ctx.beginPath(); ctx.moveTo(x, y - 14 * u * s2); ctx.lineTo(x - 9 * u * s2, y); ctx.lineTo(x + 9 * u * s2, y); ctx.closePath(); ctx.fill();
+      for (let n = 0; n < 8; n++) {
+        const ang = rnd(n) * 6.283, rr = (6 + ((k + rnd(n + 2)) % 1) * 30) * u;
+        ctx.globalAlpha = a * 0.85;
+        ctx.beginPath(); ctx.arc(x + Math.cos(ang) * rr, y - Math.abs(Math.sin(ang)) * rr, 1.8 * u, 0, 7); ctx.fill();
+      }
+      ring((5 + k * 30) * u, 2);
+      break;
+    }
+    case 'prophet': { // 위로 오르는 황금 광주
+      const ph = 72 * u * (0.4 + k * 0.6);
+      const gr2 = ctx.createLinearGradient(0, y - ph, 0, y);
+      gr2.addColorStop(0, 'rgba(255,215,106,0)'); gr2.addColorStop(1, 'rgba(255,215,106,' + (0.8 * a) + ')');
+      ctx.globalAlpha = 1; ctx.fillStyle = gr2; ctx.fillRect(x - 7 * u, y - ph, 14 * u, ph);
+      ctx.fillStyle = st.c;
+      for (let n = 0; n < 8; n++) {
+        const mx = x + (rnd(n) - 0.5) * 22 * u;
+        const my = y - ((k * 1.2 + rnd(n + 6)) % 1) * 60 * u;
+        ctx.globalAlpha = a * 0.9; ctx.beginPath(); ctx.arc(mx, my, 1.6 * u, 0, 7); ctx.fill();
+      }
+      break;
+    }
+    case 'hero': { // 금색 별 폭발
+      const ss = (0.4 + k * 1.1) * u * 18;
+      ctx.globalAlpha = Math.min(1, a * 1.5); ctx.fillStyle = st.c;
+      ctx.save(); ctx.translate(x, y - 6 * u); ctx.rotate(Math.sin(time * 2) * 0.08);
+      ctx.beginPath();
+      for (let d = 0; d < 4; d++) {
+        const a0 = d * Math.PI / 2;
+        ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a0 - 0.24) * ss * 0.36, Math.sin(a0 - 0.24) * ss * 0.36); ctx.lineTo(Math.cos(a0) * ss, Math.sin(a0) * ss); ctx.lineTo(Math.cos(a0 + 0.24) * ss * 0.36, Math.sin(a0 + 0.24) * ss * 0.36); ctx.closePath();
+      }
+      ctx.fill(); ctx.restore();
+      ring((6 + k * 34) * u, 2);
+      break;
+    }
+    case 'revolt': { // 타오르는 불꽃 기둥
+      ctx.fillStyle = st.c;
+      for (let n = 0; n < 3; n++) {
+        const fx = x + (n - 1) * 9 * u;
+        const fl = 0.75 + 0.25 * Math.sin(time * 18 + n * 2.1);
+        const hh = (14 + n * 4) * u * fl * (0.5 + k * 0.7);
+        ctx.globalAlpha = a * (0.85 - n * 0.15);
+        ctx.beginPath();
+        ctx.moveTo(fx - 5 * u, y); ctx.quadraticCurveTo(fx - 5 * u, y - hh * 0.6, fx, y - hh); ctx.quadraticCurveTo(fx + 5 * u, y - hh * 0.6, fx + 5 * u, y); ctx.closePath(); ctx.fill();
+      }
+      ring((5 + k * 28) * u, 2);
+      break;
+    }
+    case 'peace': { // 부드럽게 퍼지는 하늘색 파동 3겹
+      for (let n = 0; n < 3; n++) {
+        const ph2 = (k * 1.25 + n / 3) % 1;
+        ctx.globalAlpha = (1 - ph2) * 0.65;
+        ring((8 + ph2 * 46) * u, 3.5 * (1 - ph2) + 0.8);
+      }
+      break;
+    }
+    case 'warshout': { // 전쟁의 불씨: 붉은 교차 검 플래시
+      const sw = (10 + k * 16) * u;
+      ctx.save(); ctx.shadowColor = st.c; ctx.shadowBlur = 8 * u;
+      ctx.globalAlpha = a; ctx.strokeStyle = st.c; ctx.lineWidth = Math.max(2, 3.2 * u);
+      ctx.beginPath(); ctx.moveTo(x - sw, y - sw); ctx.lineTo(x + sw, y + sw); ctx.moveTo(x + sw, y - sw); ctx.lineTo(x - sw, y + sw); ctx.stroke();
+      ctx.restore();
+      ring((6 + k * 30) * u, 2);
+      break;
+    }
+    default: { // 기존 공통 이중 링 (전쟁 점령 등)
+      ring(6 + k * 46 * u, 3 * a + 1, e.color);
+      ring(3 + k * 20, 2 * a + 0.5, e.color);
+    }
+  }
+  ctx.globalAlpha = 1;
 }
 function ramp(t, stops, a) {
   const n = stops.length - 1; const f = Math.min(n - 1e-6, Math.max(0, t * n)); const i = Math.floor(f), u = f - i; const A = stops[i], B = stops[i + 1];
