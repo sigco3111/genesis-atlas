@@ -540,8 +540,10 @@ export class Renderer {
       }
       if (this.fl && this.fl.length) {
         const dt = this.lastDt || 1 / 60; ctx.textAlign = 'center';
+        const crowdFl = items.length >= 3; let flDrawn = 0; // 붐비면 사상자 숫자는 큰 것 위주로 2개까지만
         for (let i = this.fl.length - 1; i >= 0; i--) {
           const f = this.fl[i]; f.t += dt; if (f.t > 1.7) { this.fl.splice(i, 1); continue; }
+          if (crowdFl && (!f.big || flDrawn >= 2)) continue; flDrawn++;
           const [fx, fy] = this.w2s(f.wx, f.wy); const rise = f.t * ss * 1.8, al = Math.min(1, (1.7 - f.t) / 0.9);
           ctx.globalAlpha = al; ctx.font = '800 ' + Math.round(ss * (f.big ? 1.45 : 1.15)) + 'px system-ui,sans-serif';
           ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(30,0,0,.9)'; ctx.fillStyle = f.big ? '#ff6b5e' : '#ffb199';
@@ -550,6 +552,8 @@ export class Renderer {
         ctx.globalAlpha = 1;
       }
       for (const c of clashes) drawClash(ctx, c[0], c[1], c[2], c[3], ss, this.time + c[4] * 0.7);
+      const lblRects = []; // 병력 숫자(우선) → 지휘관 이름(선택) 순으로 겹침 없이 배치
+      items.sort((p, q) => q.a.men - p.a.men);
       for (const it of items) {
         const { a, nn, px, py } = it;
         const col = `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})`;
@@ -559,8 +563,18 @@ export class Renderer {
           const fs = Math.max(9.5, ss);
           ctx.font = '700 ' + fs + 'px system-ui,sans-serif'; ctx.textAlign = 'center';
           ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(5,15,28,.9)';
-          const tx = (a.cmd && z >= (this.cssW > 700 ? 2.6 : 3.4) ? a.cmd.n + ' ' : '') + (a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : String(Math.round(a.men)));
-          ctx.strokeText(tx, px, py + ss * 2.0 + fs * 0.35); ctx.fillStyle = '#fff'; ctx.fillText(tx, px, py + ss * 2.0 + fs * 0.35);
+          const cnt = a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : String(Math.round(a.men));
+          const nm = a.cmd && z >= (this.cssW > 700 ? 2.6 : 3.4) ? a.cmd.n + ' ' : '';
+          const hit = (x0, y0, x1, y1) => lblRects.some((q) => x0 < q[2] && x1 > q[0] && y0 < q[3] && y1 > q[1]);
+          const place = (tx) => {
+            const tw = ctx.measureText(tx).width; let ly = py + ss * 2.0 + fs * 0.35;
+            for (let k = 0; k < 3; k++) { if (!hit(px - tw / 2, ly - fs, px + tw / 2, ly + fs * 0.3)) return [tx, tw, ly]; ly += fs * 1.05; }
+            return null;
+          };
+          let pl = nm ? place(nm + cnt) : null; if (!pl) pl = place(cnt);
+          if (!pl) { const tw = ctx.measureText(cnt).width; pl = [cnt, tw, py + ss * 2.0 + fs * 0.35]; }
+          const [tx, tw, ly] = pl; lblRects.push([px - tw / 2, ly - fs, px + tw / 2, ly + fs * 0.3]);
+          ctx.strokeText(tx, px, ly); ctx.fillStyle = '#fff'; ctx.fillText(tx, px, ly);
         }
       }
     }
