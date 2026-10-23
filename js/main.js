@@ -151,7 +151,7 @@ function markBars() { { const lg = $('reslegend'); if (lg && R) lg.classList.tog
 const PANEL_PREF = 'genesis-atlas-panel';
 const isMobileLayout = () => window.innerWidth <= 760;
 function setPanelOpen(open, save = true) {
-  $('panel').classList.toggle('open', open);
+  $('panel').classList.toggle('open', open); document.body.classList.toggle('panelopen', open);
   if (save) try { localStorage.setItem(PANEL_PREF, open ? '1' : '0'); } catch (e) {}
   updateHandle();
 }
