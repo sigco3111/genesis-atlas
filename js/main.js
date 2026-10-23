@@ -76,6 +76,10 @@ function boot() { console.log('boot', S.mode, S.year);
 function buildBars() {
   $('speed').innerHTML = ''; for (const [v, t] of SPEEDS) { const b = document.createElement('button'); b.textContent = t; b.dataset.v = v; b.title = v ? (v >= 1 ? '1초에 ' + v + '년' : (1 / v) + '초에 1년') : '일시정지'; b.onclick = () => { speed = v; if (v > 0) prevSpeed = v; markBars(); }; $('speed').appendChild(b); }
   $('modes').innerHTML = ''; for (const [v, t] of MODES) { const b = document.createElement('button'); b.textContent = t; b.dataset.m = v; b.onclick = () => { R.mode = v; needRefresh = true; markBars(); }; $('modes').appendChild(b); }
+  const lb = document.createElement('button'); lb.id = 'lblBtn'; lb.textContent = '이름'; lb.title = '국가·도시 이름 표시/숨기기 (확대 정도에 따라 자동 정리됩니다)';
+  lb.classList.toggle('on', R.showLabels !== false);
+  lb.onclick = () => { R.showLabels = R.showLabels === false; lb.classList.toggle('on', R.showLabels !== false); };
+  $('modes').appendChild(lb);
   markBars();
 }
 let warFocusIdx = 0;

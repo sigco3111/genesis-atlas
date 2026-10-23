@@ -1,5 +1,6 @@
 // 렌더러: 지형 사전 렌더(2배 해상도) + 정치/문화 등 오버레이 + 라벨/도시/효과
 import { W, H, BIOMES } from './world.js';
+import { planLabels, nationBudget, cityBudget } from './labels.js';
 const S2 = 2, TW = W * S2, TH = H * S2;
 const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 const BCOL = [null, '#e8eef1', '#b4bfad', '#5b7d5a', '#6c9856', '#a8b45e', '#d6c086', '#b8b061', '#3e7d48', '#8a8377', '#f3f5f7', '#b2ad73'].map((c) => c && hex(c));
@@ -79,7 +80,7 @@ export class Renderer {
     this.mode = 'political'; this.dirty = true; this.sel = -1; this.hover = -1; this.trackId = -1; this.effects = []; this.time = 0;
     this.provColor = new Uint32Array(map.provinces.length); this.ownerKey = new Int32Array(map.provinces.length).fill(-1);
     this.warPts = [];
-    this.labels = []; this.showTrade = true; this.warPairs = new Set();
+    this.labels = []; this.showTrade = true; this.showLabels = true; this.warPairs = new Set();
     this.resize();
   }
   resize() {
@@ -268,7 +269,7 @@ export class Renderer {
     for (let wi = 0; wi < this.warPts.length; wi++) {
       const wf = this.warPts[wi];
       const pu = 0.7 + 0.3 * Math.sin(this.time * 4 + wi * 1.7);
-      const base = wf.trk ? 1.3 : 1;
+      const base = wf.trk ? 1.6 : 1;
       for (const [wx, wy] of wf.pts) {
         const [x, y] = this.w2s(wx, wy); if (x < -30 || y < -30 || x > this.cssW + 30 || y > this.cssH + 30) continue;
         const r = Math.max(6, Math.min(15, 4.5 * Math.sqrt(z))) * base;
@@ -298,25 +299,51 @@ export class Renderer {
       }
       ctx.globalAlpha = 1;
     }
-    // 도시
+    // 도시: 점은 줌 단계별 등급으로, 이름은 수도 우선 + 개수 제한 + 충돌 회피
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const cityPlaced = []; const cityMin = z > 3 ? 1 : z > 2 ? 2 : z > 1.3 ? 3 : 4;
+    const rel = z / this.minZ;
+    const cityMin = z > 3 ? 1 : z > 2 ? 2 : z > 1.3 ? 3 : 4;
+    const cityCands = [];
     for (let p = 0; p < map.provinces.length; p++) {
       const lv = S.P.city[p]; if (lv < cityMin) continue; const o = map.provinces[p];
       const [x, y] = this.w2s(o.ax, o.ay); if (x < -20 || y < -20 || x > this.cssW + 20 || y > this.cssH + 20) continue;
       const cap = S.P.owner[p] >= 0 && S.nations[S.P.owner[p]].cap === p; const r = (1.4 + lv * 0.9 + (cap ? 1.4 : 0)) * Math.min(2.2, 0.7 + z * 0.22);
       ctx.fillStyle = '#1b1612'; ctx.beginPath(); ctx.arc(x, y, r + 1.2, 0, 7); ctx.fill();
       ctx.fillStyle = cap ? '#ffd24a' : '#fff6e0'; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
-      if (z > 4.5 && S.P.city[p] && S.cityName[p]) { const fz = Math.min(14, 9 + z * 0.5); ctx.font = `600 ${fz}px "Noto Sans KR", system-ui, sans-serif`; const cw = ctx.measureText(S.cityName[p]).width; const cb = [x - cw / 2 - 2, y + r + 2, x + cw / 2 + 2, y + r + 12 + fz]; if (cityPlaced.some((q) => !(cb[2] < q[0] || cb[0] > q[2] || cb[3] < q[1] || cb[1] > q[3]))) continue; cityPlaced.push(cb); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.fillStyle = '#fff'; ctx.strokeText(S.cityName[p], x, y + r + 9); ctx.fillText(S.cityName[p], x, y + r + 9); }
+      if (this.showLabels !== false && S.cityName[p] && ((cap && lv >= 2 && z > 2.6) || z > 5)) {
+        const fz = cap ? Math.min(15, 10 + z * 0.55) : Math.min(14, 9 + z * 0.5);
+        ctx.font = `600 ${fz}px "Noto Sans KR", system-ui, sans-serif`;
+        cityCands.push({ t: S.cityName[p], x, y: y + r + 9, size: fz, w: ctx.measureText(S.cityName[p]).width, big: cap ? 1000 + lv : lv, gold: cap });
+      }
     }
-    // 국가 라벨
-    const fs = (l) => Math.max(0, Math.min(34, (6 + Math.sqrt(l.big) * 3.6) * Math.min(1.6, z * 0.9)));
-    const sorted = this.labels; const placed = [];
-    for (const l of sorted) {
-      const size = fs(l); if (size < 9) continue; const [x, y] = this.w2s(l.x, l.y); if (x < -80 || y < -40 || x > this.cssW + 80 || y > this.cssH + 40) continue;
-      ctx.font = `700 ${size}px "Noto Sans KR", system-ui, sans-serif`; const w = ctx.measureText(l.t).width; const box = [x - w / 2, y - size / 2, x + w / 2, y + size / 2];
-      if (placed.some((q) => !(box[2] < q[0] || box[0] > q[2] || box[3] < q[1] || box[1] > q[3]))) continue; placed.push(box);
-      ctx.lineWidth = Math.max(2, size / 6); ctx.strokeStyle = 'rgba(8,12,20,.78)'; ctx.fillStyle = '#fff'; ctx.lineJoin = 'round'; ctx.strokeText(l.t, x, y); ctx.fillText(l.t, x, y);
+    for (const q of planLabels(cityCands, cityBudget(rel))) {
+      ctx.font = `600 ${q.size}px "Noto Sans KR", system-ui, sans-serif`;
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.fillStyle = q.gold ? '#ffe9a8' : '#fff';
+      ctx.strokeText(q.t, q.x, q.y); ctx.fillText(q.t, q.x, q.y);
+    }
+    // 국가 라벨: 줌 단계별 개수 제한 + 충돌 회피, 추적 국가는 항상 우선 배치·금색 강조
+    if (this.showLabels !== false) {
+      const fs = (l) => Math.max(0, Math.min(34, (6 + Math.sqrt(l.big) * 3.6) * Math.min(1.6, z * 0.9)));
+      const trkId = S.track ? S.track.id : -1;
+      const cands = [];
+      for (const l of this.labels) {
+        const size = fs(l); if (size < 9) continue;
+        const [x, y] = this.w2s(l.x, l.y); if (x < -80 || y < -40 || x > this.cssW + 80 || y > this.cssH + 40) continue;
+        ctx.font = `700 ${size}px "Noto Sans KR", system-ui, sans-serif`;
+        cands.push({ t: l.t, x, y, size, w: ctx.measureText(l.t).width, big: l.big, force: l.n === trkId });
+      }
+      for (const q of planLabels(cands, nationBudget(rel))) {
+        ctx.font = `700 ${q.size}px "Noto Sans KR", system-ui, sans-serif`;
+        ctx.lineWidth = Math.max(2, q.size / 6); ctx.lineJoin = 'round';
+        if (q.force) {
+          ctx.shadowColor = 'rgba(255,210,74,0.9)'; ctx.shadowBlur = q.size * 0.5;
+          ctx.strokeStyle = 'rgba(30,22,4,.88)'; ctx.fillStyle = '#ffd24a';
+        } else {
+          ctx.strokeStyle = 'rgba(8,12,20,.78)'; ctx.fillStyle = '#fff';
+        }
+        ctx.strokeText(q.t, q.x, q.y); ctx.fillText(q.t, q.x, q.y);
+        ctx.shadowBlur = 0;
+      }
     }
     // 효과
     for (let i = this.effects.length - 1; i >= 0; i--) {
