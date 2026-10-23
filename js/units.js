@@ -9,6 +9,23 @@ const SIEGE_RANGE = 14;                 // 목표 지방 앵커에 이 만큼 �
 const MIN_MEN = 80;                     // 이보다 적으면 소멸
 const RETREAT_FRAC = 0.42;              // 초기 병력의 이 비율 아래면 후퇴
 
+// 시대(기술 수준)별 병종: 부대 표식·아이콘이 바뀌고 전투력·이동 속도에 차이를 둔다
+// 시대 구분은 국가 기술 n.tech의 정수부(eraCheck와 동일 기준)를 그대로 쓴다
+export const ERA_UNITS = [
+  { key: '돌도끼 전사', str: 1.00, spd: 0.90 }, // 0 석기
+  { key: '청동 창병',   str: 1.03, spd: 0.95 }, // 1 청동기
+  { key: '철기 검병',   str: 1.06, spd: 1.00 }, // 2 철기
+  { key: '군단 중보병', str: 1.10, spd: 1.00 }, // 3 고전
+  { key: '중세 기병',   str: 1.15, spd: 1.18 }, // 4 중세: 기동력 우위
+  { key: '화승총병',    str: 1.21, spd: 1.06 }, // 5 근세
+  { key: '소총·포병',   str: 1.29, spd: 1.10 }, // 6 산업
+  { key: '기갑 부대',   str: 1.40, spd: 1.30 }, // 7 현대
+  { key: '정밀 타격군', str: 1.55, spd: 1.36 }, // 8 정보화
+  { key: '궤도 강하군', str: 1.75, spd: 1.45 }, // 9 우주
+];
+export function eraOf(n) { return Math.min(9, Math.max(0, Math.floor(n && n.tech || 0))); }
+export function unitOf(n) { return ERA_UNITS[eraOf(n)]; }
+
 const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
 const shieldOf = (S, nat) => (S.buffs || []).some((b) => b.nat === nat && (b.kind || 'golden') === 'shield' && (b.until == null || b.until > S.year));
 
@@ -24,7 +41,7 @@ export function atWar(S, a, b) {
 // 부대의 현재 전투력: 병력 × 기술 × 지형(고도) × 방패
 export function armyStrength(S, map, a, defenderProv = -1) {
   const n = S.nations[a.nat]; if (!n) return 0;
-  let s = a.men * (1 + 0.12 * n.tech);
+  let s = a.men * (1 + 0.12 * n.tech) * unitOf(n).str;
   if (defenderProv >= 0) s *= 1 + 0.3 * map.provinces[defenderProv].e;
   if (shieldOf(S, a.nat)) s *= 1.25;
   return s;
@@ -103,7 +120,7 @@ export function battleTick(S, map, A, B) {
     if (U.men < MIN_MEN) U.men = 0;
     else if (U.men < U.men0 * RETREAT_FRAC && U.st !== 'retreat') {
       const foe = U === A ? B : A; const fn = S.nations[foe.nat], un = S.nations[U.nat];
-      if (un && fn && U.men0 + foe.men0 > 1500) addLog(S, `${fn.name}의 군대가 ${un.name}의 군대를 물리쳤습니다.`, 2, provAt(map, U.x, U.y), fn.id, un.id);
+      if (un && fn && U.men0 + foe.men0 > 1500) addLog(S, `${fn.name}의 ${unitOf(fn).key}이(가) ${un.name}의 ${unitOf(un).key}을(를) 물리쳤습니다.`, 2, provAt(map, U.x, U.y), fn.id, un.id);
       retreat(S, map, U);
     }
   }
@@ -180,7 +197,7 @@ export function stepArmies(S, map) {
     if (a.st === 'march' || a.st === 'retreat') {
       if (!a.path || a.dlen <= 0) { a.st = a.st === 'retreat' ? 'garrison' : a.st; a.tgt = a.st === 'garrison' ? a.tgt : -1; continue; }
       const elev = map.provinces[provAt(map, a.x, a.y) >= 0 ? provAt(map, a.x, a.y) : a.home] || { e: 0 };
-      a.prog += ARMY_SPEED * (1 - 0.3 * Math.min(1, elev.e)) * (a.st === 'retreat' ? 1.25 : 1);
+      a.prog += ARMY_SPEED * unitOf(n).spd * (1 - 0.3 * Math.min(1, elev.e)) * (a.st === 'retreat' ? 1.25 : 1);
       if (a.prog >= a.dlen) {
         const last = a.path[a.path.length - 1]; a.x = last[0]; a.y = last[1];
         if (a.st === 'retreat') { a.st = 'garrison'; a.path = null; }
@@ -222,7 +239,7 @@ export function stepArmies(S, map) {
       if (d2 > BATTLE_RANGE * BATTLE_RANGE) continue;
       if (A.st !== 'battle' && B.st !== 'battle' && A.men + B.men > 1600) {
         const p = provAt(map, A.x, A.y);
-        addLog(S, `${S.nations[A.nat].name}와(과) ${S.nations[B.nat].name}의 군대가 ${S.provName[p] || '한 지방'}에서 격돌했습니다.`, 2, p >= 0 ? p : A.home, A.nat, B.nat);
+        addLog(S, `${S.nations[A.nat].name}의 ${unitOf(S.nations[A.nat]).key}과(과) ${S.nations[B.nat].name}의 ${unitOf(S.nations[B.nat]).key}이(가) ${S.provName[p] || '한 지방'}에서 격돌했습니다.`, 2, p >= 0 ? p : A.home, A.nat, B.nat);
       }
       A.st = 'battle'; B.st = 'battle'; A.sg = 0;
       battleTick(S, map, A, B);

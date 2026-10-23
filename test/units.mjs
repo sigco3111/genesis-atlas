@@ -1,6 +1,6 @@
 // 자율 부대 전투 시험: node test/units.mjs
 import { loadEarthNode } from './loadearth.mjs'; import { generateMap } from '../js/world.js'; import * as sim from '../js/sim.js';
-import { armyCap, armyStrength, atWar, stepArmies, battleTick, ARMY_GLOBAL_MAX } from '../js/units.js';
+import { armyCap, armyStrength, atWar, stepArmies, battleTick, ARMY_GLOBAL_MAX, ERA_UNITS, eraOf, unitOf } from '../js/units.js';
 let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log('FAIL', m); } else console.log('ok -', m); };
 
 // 1) 통합: 실제 전쟁 중 부대가 편성·행군·교전·점령한다
@@ -63,5 +63,25 @@ let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log('FAIL', m); }
     ok(retreated, '약한 부대가 후퇴하거나 전멸');
     ok(strong.men > 0, '강한 부대 생존');
   } else ok(false, '대치 시험용 국가 부족');
+}
+
+// 2) 시대별 병종: 기술 정수부로 시대가 매핑되고 전투력·이동 보정이 단조 증가
+{
+  ok(ERA_UNITS.length === 10, 'ERA_UNITS 10시대 정의');
+  ok(eraOf({ tech: 0 }) === 0 && eraOf({ tech: 8.99 }) === 8 && eraOf({ tech: 12 }) === 9 && eraOf(null) === 0, 'eraOf 매핑 경계값');
+  for (let e = 1; e < 10; e++) {
+    ok(ERA_UNITS[e].str >= ERA_UNITS[e - 1].str, `전투 보정 단조 (${e})`);
+    ok(ERA_UNITS[e].spd >= ERA_UNITS[e - 1].spd || e === 5, `이동 보정 단조 (${e})`); // 4기병>5화승총 예외 없음 확인용
+  }
+  const fakeA = (tech) => ({ nat: 0, men: 1000, men0: 1000, x: 0, y: 0 });
+  const S2 = { nations: [{ id: 0, tech: 1, pop: 1e5, alive: true }], buffs: [], wars: [], rng: null };
+  const m1 = armyStrength(S2, { provinces: [] }, fakeA(0));
+  S2.nations[0].tech = 7.5;
+  const m2 = armyStrength(S2, { provinces: [] }, fakeA(0));
+  ok(m2 > m1, `고기술 부대가 더 강함 (${m1.toFixed(0)} → ${m2.toFixed(0)})`);
+  ok(Math.abs(m1 / 1000 - (1 + 0.12 * 1) * ERA_UNITS[1].str) < 1e-9, '시대 보정이 강도에 반영됨');
+  ok(unitOf({ tech: 7.2 }).spd > unitOf({ tech: 1 }).spd, '시대별 이동 속도 차이 존재');
+  const keys = ERA_UNITS.map((u) => u.key);
+  ok(new Set(keys).size === 10, '병종 이름 10개 고유');
 }
 console.log(fail ? 'FAILED ' + fail : 'ALL OK'); process.exit(fail ? 1 : 0);

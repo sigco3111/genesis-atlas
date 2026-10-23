@@ -353,7 +353,7 @@ export class Renderer {
           const px = bx + ox, py = by + oy;
           if (px < -30 || py < -30 || px > this.cssW + 30 || py > this.cssH + 30) continue;
           const col = `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})`;
-          drawArmy(ctx, px, py, ss, col, this.time + a.id * 0.9, a.st);
+          drawArmy(ctx, px, py, ss, col, this.time + a.id * 0.9, a.st, Math.min(9, Math.max(0, Math.floor(nn.tech || 0))));
           if (z >= 1.1) {
             const fs = Math.max(9.5, ss);
             ctx.font = '700 ' + fs + 'px system-ui,sans-serif'; ctx.textAlign = 'center';
@@ -532,7 +532,48 @@ function drawGlyph(ctx, x, y, s, g, rgb, tm) {
   ctx.restore();
 }
 // 자율 부대: 깃발이 달린 칩. st: march/siege/battle/garrison/retreat
-function drawArmy(ctx, x, y, s, col, tm, st) {
+// 시대별 병종 아이콘: 기술 수준(0-9)에 따라 부대 칩 안의 표식이 바뀐다
+function drawUnitGlyph(ctx, s, era) {
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.lineWidth = Math.max(1.1, s * 0.13); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const u = s * 0.42; // 아이콘 기본 크기
+  ctx.beginPath();
+  if (era <= 0) { // 돌도끼: 몽둥이
+    ctx.moveTo(-u * 0.7, u * 0.7); ctx.lineTo(u * 0.35, -u * 0.35); ctx.stroke();
+    ctx.beginPath(); ctx.arc(u * 0.5, -u * 0.5, u * 0.34, 0, 7); ctx.fill();
+  } else if (era === 1) { // 창: 창대 + 삼각 창날
+    ctx.moveTo(0, u * 0.85); ctx.lineTo(0, -u * 0.35); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -u); ctx.lineTo(-u * 0.3, -u * 0.3); ctx.lineTo(u * 0.3, -u * 0.3); ctx.closePath(); ctx.fill();
+  } else if (era === 2) { // 검: 검신 + 가로 손잡이
+    ctx.moveTo(0, u * 0.8); ctx.lineTo(0, -u * 0.9); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-u * 0.42, u * 0.28); ctx.lineTo(u * 0.42, u * 0.28); ctx.stroke();
+  } else if (era === 3) { // 방패: 장방형 스쿠툼 + 중심선
+    ctx.roundRect(-u * 0.55, -u * 0.85, u * 1.1, u * 1.7, u * 0.45); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -u * 0.85); ctx.lineTo(0, u * 0.85); ctx.stroke();
+  } else if (era === 4) { // 기병: 기수의 투창 + 작은 페넌트
+    ctx.moveTo(-u * 0.75, u * 0.75); ctx.lineTo(u * 0.6, -u * 0.6); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(u * 0.6, -u * 0.6); ctx.lineTo(u * 0.1, -u * 0.55); ctx.lineTo(u * 0.5, -u * 0.15); ctx.closePath(); ctx.fill();
+  } else if (era === 5) { // 총: 총열 + 개머리
+    ctx.moveTo(-u * 0.9, 0); ctx.lineTo(u * 0.9, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-u * 0.9, 0); ctx.lineTo(-u * 0.55, u * 0.6); ctx.stroke();
+  } else if (era === 6) { // 대포: 포신 + 바퀴
+    ctx.moveTo(-u * 0.15, u * 0.35); ctx.lineTo(u * 0.85, -u * 0.55); ctx.stroke();
+    ctx.beginPath(); ctx.arc(-u * 0.4, u * 0.45, u * 0.42, 0, 7); ctx.stroke();
+  } else if (era === 7) { // 탱크: 차체 + 포신
+    ctx.roundRect(-u * 0.8, -u * 0.25, u * 1.35, u * 0.75, u * 0.2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(u * 0.3, -u * 0.05); ctx.lineTo(u * 1.05, -u * 0.05); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(-u * 0.4, -u * 0.6, u * 0.65, u * 0.4, u * 0.15); ctx.fill();
+  } else if (era === 8) { // 드론: X 프레임 + 로터 4개
+    ctx.moveTo(-u * 0.7, -u * 0.7); ctx.lineTo(u * 0.7, u * 0.7); ctx.moveTo(u * 0.7, -u * 0.7); ctx.lineTo(-u * 0.7, u * 0.7); ctx.stroke();
+    for (const [dx, dy] of [[-0.85, -0.85], [0.85, -0.85], [-0.85, 0.85], [0.85, 0.85]]) { ctx.beginPath(); ctx.arc(dx * u, dy * u, u * 0.22, 0, 7); ctx.fill(); }
+  } else { // 궤도: 별 + 궤도 고리
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * u, Math.sin(a) * u); }
+    ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(0, 0, u * 1.05, u * 0.42, -0.5, 0, 7); ctx.stroke();
+  }
+}
+
+function drawArmy(ctx, x, y, s, col, tm, st, era = 0) {
   ctx.save(); ctx.translate(x, y);
   const bob = st === 'march' || st === 'retreat' ? Math.abs(Math.sin(tm * 7)) * s * 0.12 : 0;
   ctx.translate(0, -bob);
@@ -545,9 +586,8 @@ function drawArmy(ctx, x, y, s, col, tm, st) {
   ctx.beginPath(); ctx.roundRect(-s * 0.78, -s * 0.5, s * 1.56, s * 1.05, s * 0.28); ctx.fill();
   ctx.fillStyle = col;
   ctx.beginPath(); ctx.roundRect(-s * 0.62, -s * 0.34, s * 1.24, s * 0.73, s * 0.2); ctx.fill();
-  // 병사 점들: 병력 규모를 암시
-  ctx.fillStyle = 'rgba(255,255,255,0.9)';
-  for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(-s * 0.34 + i * s * 0.34, s * 0.03, s * 0.09, 0, 7); ctx.fill(); }
+  // 시대별 병종 표식
+  drawUnitGlyph(ctx, s, era);
   // 깃발
   ctx.strokeStyle = '#2b2119'; ctx.lineWidth = Math.max(1, s * 0.1); ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(s * 0.5, -s * 0.4); ctx.lineTo(s * 0.5, -s * 1.5); ctx.stroke();
