@@ -93,4 +93,18 @@ let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log('FAIL', m); }
   ok(supplyOf(map, { ...a0, x: a0.x + 900 }) === 0.6, '먼 원정은 보급 하한 0.6');
   ok(moraleOf({}) === 1 && xpOf({}) === 0, '옛 저장 부대는 사기1·경험0 기본값');
 }
+// 지휘관 (R2)
+{
+  const { makeCommander, CMD_TRAITS, cmdTrait } = await import('../js/units.js');
+  const rng = { int: (n) => Math.floor(Math.random() * n) };
+  const c = makeCommander(rng);
+  ok(typeof c.n === 'string' && c.n.length >= 2 && c.t >= 0 && c.t < CMD_TRAITS.length, '지휘관 이름·기질 생성');
+  ok(cmdTrait({}) === -1, '지휘관 없는 옛 부대는 기질 -1');
+  const map = await loadEarthNode('./data'); const S = sim.createState(map, { mode: 'emergent', seed: 3, hearths: 8, aggr: 2.5 });
+  for (let i = 0; i < 2600; i++) { sim.step(S, map); if (i % 100 === 99 && [...S.fr.keys()].some((k) => S.nations[(k / 4096) | 0] && S.nations[(k / 4096) | 0].alive && S.nations[k % 4096] && S.nations[k % 4096].alive)) break; }
+  let a = null, d = null; for (const [k] of S.fr) { const x = (k / 4096) | 0, y = k % 4096; const nx = S.nations[x], ny = S.nations[y]; if (nx && ny && nx.alive && ny.alive) { a = nx; d = ny; break; } }
+  sim.startWar(S, map, a, d, 't'); for (let i = 0; i < 60 && !S.armies.length; i++) sim.step(S, map);
+  ok(S.armies.length > 0 && S.armies.every((x) => x.cmd && x.cmd.n), '새 부대는 모두 지휘관을 가짐 (' + S.armies.map((x) => x.cmd.n).join(',') + ')');
+  const R = sim.restore(sim.serialize(S)); ok(R.armies.every((x) => x.cmd), '저장/복원 후 지휘관 유지');
+}
 console.log(fail ? 'FAILED ' + fail : 'ALL OK'); process.exit(fail ? 1 : 0);

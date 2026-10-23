@@ -508,7 +508,7 @@ export class Renderer {
           const fs = Math.max(9.5, ss);
           ctx.font = '700 ' + fs + 'px system-ui,sans-serif'; ctx.textAlign = 'center';
           ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(5,15,28,.9)';
-          const tx = a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : String(Math.round(a.men));
+          const tx = (a.cmd && z >= 2.6 ? a.cmd.n + ' ' : '') + (a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : String(Math.round(a.men)));
           ctx.strokeText(tx, px, py + ss * 2.0 + fs * 0.35); ctx.fillStyle = '#fff'; ctx.fillText(tx, px, py + ss * 2.0 + fs * 0.35);
         }
       }
