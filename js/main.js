@@ -108,7 +108,7 @@ $('swar').onclick = () => {
   const w = S.wars[warFocusIdx++ % S.wars.length];
   if (focusWar(w)) toast('⚔ ' + (S.nations[w.A[0]] || {}).name + ' 대 ' + (S.nations[w.D[0]] || {}).name + ' 전선');
 };
-function markBars() { $('rate').textContent = speed ? (speed >= 1 ? '· 1초에 ' + speed + '년' : '· ' + 1 / speed + '초에 1년') : '· 일시정지'; for (const b of $('speed').children) b.classList.toggle('on', +b.dataset.v === speed); for (const b of $('modes').children) b.classList.toggle('on', b.dataset.m === R.mode); }
+function markBars() { $('rate').textContent = speed ? (speed >= 1 ? '· 1초에 ' + speed + '년' : '· ' + 1 / speed + '초에 1년') : '· 일시정지'; for (const b of $('speed').children) b.classList.toggle('on', +b.dataset.v === speed); for (const b of $('modes').children) if (b.dataset.m) b.classList.toggle('on', b.dataset.m === R.mode); }
 // ---------- 패널 접기/펼치기 ----------
 const PANEL_PREF = 'genesis-atlas-panel';
 const isMobileLayout = () => window.innerWidth <= 760;
