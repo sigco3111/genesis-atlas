@@ -164,7 +164,13 @@ function siegeTick(S, map, a, w) {
   if (ow < 0 || ow === a.nat || !atWar(S, a.nat, ow)) { a.st = 'march'; a.tgt = -1; a.sg = 0; return; }
   const o = map.provinces[q];
   const need = (1 + 0.45 * o.e + P.city[q] * 0.35) * (shieldOf(S, ow) ? 1.6 : 1);
-  a.sg += a.men / (2600 * need) * (cmdTrait(a) === 1 ? 1.3 : 1);
+  // 공성 장비: 시대가 오를수록 성벽을 빨리 무너뜨리고, 수비측 도시는 성벽 시대가 낮으면 버티기 쉽다
+  const ea = eraOf(S.nations[a.nat]), ed = eraOf(S.nations[ow]);
+  const engine = ea >= 7 ? 1.55 : ea >= 5 ? 1.3 : ea >= 3 ? 1.12 : 1;
+  const wall = 1 + Math.max(0, P.city[q] - 1) * 0.12 * (ed >= ea ? 1 : 0.6);
+  a.sg += a.men / (2600 * need) * (cmdTrait(a) === 1 ? 1.3 : 1) * engine / wall;
+  // 농성군의 출격: 큰 도시일수록 포위군에 작은 피해를 준다
+  if (P.city[q] >= 2) { const sortie = a.men * 0.006 * (P.city[q] - 1); a.men -= sortie; S.deaths.war += sortie; }
   const attr = a.men * 0.03 * (2 - supplyOf(map, a)); a.men -= attr; S.deaths.war += attr;
   const drain = P.pop[q] * 0.012; P.pop[q] = Math.max(0, P.pop[q] - drain); S.deaths.war += drain;
   if (S.year % 2 === 0) S.fxQueue.push([q, 'war']);

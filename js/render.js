@@ -641,6 +641,10 @@ function drawArmy(ctx, x, y, s, col, tm, st, era = 0, a = null) {
     const stars = Math.min(3, Math.floor((a.xp || 0) * 3.4));
     ctx.fillStyle = '#ffd24a'; ctx.strokeStyle = 'rgba(40,24,0,.9)'; ctx.lineWidth = 0.8;
     for (let i = 0; i < stars; i++) { const sx = -s * 0.62 + i * s * 0.36, sy = -s * 0.74, r = s * 0.17; ctx.beginPath(); for (let k = 0; k < 10; k++) { const ang = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? r * 0.45 : r; ctx.lineTo(sx + Math.cos(ang) * rr, sy + Math.sin(ang) * rr); } ctx.closePath(); ctx.fill(); ctx.stroke(); }
+    if (st === 'siege' && a.sg > 0.35) { // 성벽이 무너져 가는 중: 불꽃과 연기
+      for (let i = 0; i < 5; i++) { const ph = (tm * 1.6 + i * 0.41) % 1; ctx.globalAlpha = (1 - ph) * 0.9; ctx.fillStyle = i % 2 ? '#ff7a2f' : '#ffd24a'; ctx.beginPath(); ctx.arc((i - 2) * s * 0.32, -s * 0.5 - ph * s * 1.5, Math.max(1, s * 0.17 * (1 - ph * 0.5)), 0, 7); ctx.fill(); }
+      ctx.globalAlpha = 1;
+    }
     if (st === 'siege' && a.sg > 0) { ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = Math.max(2, s * 0.2); ctx.beginPath(); ctx.arc(0, 0, s * 1.35, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, a.sg)); ctx.stroke(); }
   }
   // 깃발

@@ -107,4 +107,6 @@ let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log('FAIL', m); }
   ok(S.armies.length > 0 && S.armies.every((x) => x.cmd && x.cmd.n), '새 부대는 모두 지휘관을 가짐 (' + S.armies.map((x) => x.cmd.n).join(',') + ')');
   const R = sim.restore(sim.serialize(S)); ok(R.armies.every((x) => x.cmd), '저장/복원 후 지휘관 유지');
 }
+// 공성 장비 (R3)
+{ const src = (await import('fs')).readFileSync('./js/units.js', 'utf8'); ok(src.includes('const engine =') && src.includes('농성군의 출격'), '공성 장비·출격 로직 존재'); }
 console.log(fail ? 'FAILED ' + fail : 'ALL OK'); process.exit(fail ? 1 : 0);
