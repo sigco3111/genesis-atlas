@@ -453,7 +453,7 @@ function renderPanel(auto) {
           return `<div class="wrow"><span>${nm2}${dead}</span><b>영토 ${b[1]}→${a[1]} (<em class="${cls(td)}">${sign(td)}</em>) · 인구 ${numStr(b[0])}→${numStr(a[0])} (<em class="${cls(pd)}">${pct == null ? '—' : sign(Math.round(pct * 10) / 10) + '%'}</em>)</b></div>`;
         };
         h += sideRow(aId) + sideRow(dId);
-        if (s.big && s.big.length) h += '<div class="wbig">' + s.big.slice(-4).reverse().map((c) => `<div class="hasloc" data-lp="${c.q}" title="눌러서 위치로 이동">${yearStr(c.y)} · ${s.nm[c.t] || '?'}이(가) ${s.nm[c.f] || '?'}의 ${S.cityName[c.q] || S.provName[c.q] || '주요 도시'} 점령</div>`).join('') + '</div>';
+        if (s.big && s.big.length) h += '<div class="wbig">' + s.big.slice(-4).reverse().map((c) => `<div class="hasloc" data-lp="${c.q}" title="눌러서 위치로 이동">${sim.josa(`${yearStr(c.y)} · ${s.nm[c.t] || '?'}이(가) ${s.nm[c.f] || '?'}의 ${S.cityName[c.q] || S.provName[c.q] || '주요 도시'} 점령`)}</div>`).join('') + '</div>';
         h += '</div>';
       }
     }
