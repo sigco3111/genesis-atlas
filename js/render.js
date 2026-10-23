@@ -483,6 +483,9 @@ export class Renderer {
         let sm = this.armySm.get(a.id);
         if (!sm || Math.hypot(a.x - sm.x, a.y - sm.y) > 60) { sm = { x: a.x, y: a.y }; } // 새 부대이거나 순간이동(재배치)이면 바로 맞춘다
         else { const k = Math.min(1, (this.lastDt || 1 / 60) * 3.5); sm.x += (a.x - sm.x) * k; sm.y += (a.y - sm.y) * k; }
+        // 병력이 줄면 사상자 숫자가 위로 떠오른다 (전투·포위·소모를 눈으로 읽게)
+        if (sm.men != null && a.men < sm.men - 40 && (a.st === 'battle' || a.st === 'siege')) { (this.fl = this.fl || []).push({ wx: a.x, wy: a.y, txt: '-' + Math.round(sm.men - a.men), t: 0, dx: ((this.flN = (this.flN || 0) + 1) % 5 - 2) * 0.9, big: sm.men - a.men > a.men0 * 0.08 }); if (this.fl.length > 40) this.fl.shift(); }
+        sm.men = a.men;
         this.armySm.set(a.id, sm);
         const k = Math.round(sm.x / 1.2) + ':' + Math.round(sm.y / 1.2); if (!groups.has(k)) groups.set(k, []); groups.get(k).push([a, sm]);
       }
@@ -533,6 +536,17 @@ export class Renderer {
         let best = null, bd = 1e9;
         for (const o of items) { if (o === it || o.a.st !== 'battle' || o.a.nat === it.a.nat) continue; const d = Math.hypot(o.px - it.px, o.py - it.py); if (d < bd) { bd = d; best = o; } }
         if (best && bd <= 20 * z && it.a.id < best.a.id) clashes.push([it.px, it.py, best.px, best.py, it.a.id]);
+      }
+      if (this.fl && this.fl.length) {
+        const dt = this.lastDt || 1 / 60; ctx.textAlign = 'center';
+        for (let i = this.fl.length - 1; i >= 0; i--) {
+          const f = this.fl[i]; f.t += dt; if (f.t > 1.7) { this.fl.splice(i, 1); continue; }
+          const [fx, fy] = this.w2s(f.wx, f.wy); const rise = f.t * ss * 1.8, al = Math.min(1, (1.7 - f.t) / 0.9);
+          ctx.globalAlpha = al; ctx.font = '800 ' + Math.round(ss * (f.big ? 1.45 : 1.15)) + 'px system-ui,sans-serif';
+          ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(30,0,0,.9)'; ctx.fillStyle = f.big ? '#ff6b5e' : '#ffb199';
+          ctx.strokeText(f.txt, fx + f.dx * ss, fy - ss * 1.6 - rise); ctx.fillText(f.txt, fx + f.dx * ss, fy - ss * 1.6 - rise);
+        }
+        ctx.globalAlpha = 1;
       }
       for (const c of clashes) drawClash(ctx, c[0], c[1], c[2], c[3], ss, this.time + c[4] * 0.7);
       for (const it of items) {
