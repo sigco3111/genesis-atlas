@@ -419,8 +419,9 @@ function ecoNation(n) {
 }
 function ecoHtml() {
   const T = S.trade || { deliv: [], value: 0, voyages: 0 }; const al = S.nations.filter((n) => n.alive && n.eco);
-  let h = '<h3>세계 교역</h3>' + kv('누적 항해 화물', numStr(T.voyages) + '회') + kv('누적 교역액', numStr(T.value));
+  let h = '<h3>세계 교역</h3>' + kv('누적 운송', `무역선 ${numStr(T.voyages)}회 · 대상 ${numStr(T.voyL || 0)}회`) + kv('누적 교역액', numStr(T.value));
   const loaded = (S.ships || []).filter((s) => s.cargo).length; h += kv('화물 실은 배', loaded + ' / ' + (S.ships || []).length);
+  const loadedC = (S.carr || []).filter((s) => s.cargo).length; h += kv('화물 실은 대상', loadedC + ' / ' + (S.carr || []).length);
   h += '<h3>운송된 물자 (누적)</h3>';
   const mx = Math.max(1, ...GOODS.map((_, g) => T.deliv[g] || 0));
   for (let g = 0; g < NG; g++) h += `<div class="eb"><span class="en"><i style="background:${goodCss(g)}"></i>${GOODS[g].name}</span><div class="bw"><div class="bf" style="width:${Math.round((T.deliv[g] || 0) / mx * 100)}%;background:${goodCss(g)}"></div></div><b>${numStr(T.deliv[g] || 0)}</b></div>`;
@@ -428,7 +429,7 @@ function ecoHtml() {
   h += '<h3>국고 상위</h3>' + rich.map((n) => `<div class="kv"><span><i style="color:rgb(${n.rgb})">■</i> <a href="#" data-n="${n.id}">${n.name}</a></span><b>${numStr(n.eco.wealth)}</b></div>`).join('');
   const hungry = al.filter((n) => n.pc >= 2 && n.eco.sat[0] < 0.7).sort((a, b) => a.eco.sat[0] - b.eco.sat[0]).slice(0, 5);
   if (hungry.length) h += '<h3>곡물이 모자란 나라</h3>' + hungry.map((n) => `<div class="kv"><span><i style="color:rgb(${n.rgb})">■</i> <a href="#" data-n="${n.id}">${n.name}</a></span><b class="bad">${pct(n.eco.sat[0])}</b></div>`).join('');
-  h += '<p class="fine">지방마다 목재·철·향신료·금이 묻혀 있고(지도 위 \'자원\' 모드), 항구 도시국가의 무역선이 남는 물자를 실어 모자란 나라로 나릅니다. 도착한 화물이 곡물(성장)·목재/철(기술·군사)·향신료/금(국고·안정도)에 반영됩니다. 이번 판은 해상 운송만 구현했습니다.</p>';
+  h += '<p class="fine">지방마다 목재·철·향신료·금이 묻혀 있고(지도 위 \'자원\' 모드), 항구 도시국가의 무역선은 바닷길로, 이웃 국가와 내륙 국가 사이에는 대상(짐짐이 행렬)이 검증된 육로를 따라 남는 물자를 실어 나릅니다. 도착한 화물이 곡물(성장)·목재/철(기술·군사)·향신료/금(국고·안정도)에 반영됩니다.</p>';
   return h;
 }
 function kv(k, v) { return `<div class="kv"><span>${k}</span><b>${v}</b></div>`; }

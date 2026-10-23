@@ -34,7 +34,7 @@ export function createState(map, opts = {}) {
   const S = {
     v: VERSION, seed, mapKind: map.kind, mode: opts.mode || 'emergent', year: 0, rng, techRate: opts.techRate ?? 1,
     P: { pop: new Float32Array(N), tech: new Float32Array(N), owner: new Int16Array(N).fill(-1), cult: new Int16Array(N).fill(-1), rel: new Int16Array(N).fill(-1), unrest: new Float32Array(N), city: new Uint8Array(N), fx: new Float32Array(N).fill(1), km: new Float32Array(N).fill(1), plague: new Uint8Array(N) },
-    nations: [], cultures: [], religions: [], wars: [], truce: {}, log: [], hist: [], routes: [], ships: [], exped: [], seaPairs: {}, cityName: new Array(N).fill(''), provName: new Array(N).fill(''),
+    nations: [], cultures: [], religions: [], wars: [], truce: {}, log: [], hist: [], routes: [], ships: [], carr: [], exped: [], seaPairs: {}, landPairs: {}, cityName: new Array(N).fill(''), provName: new Array(N).fill(''),
     auto: !!opts.auto, aggr: opts.aggr ?? 1, worldFirst: {}, stats: {}, fr: null, nextWar: 1, track: null,
     recentCaps: [], warHist: [],
     eventsOn: opts.events !== false, deaths: { war: 0, plague: 0, famine: 0 }, fxQueue: [], buffs: [],
@@ -485,6 +485,7 @@ function stepDiplomacy(S, map) {
   const topCity = (n) => { let b = -1, bp = -1; for (let p = 0; p < map.provinces.length; p++) if (S.P.owner[p] === n.id && S.P.pop[p] * (S.P.city[p] + 1) > bp) { bp = S.P.pop[p] * (S.P.city[p] + 1); b = p; } return b; };
   const topPort = (n) => { let b = -1, bp = -1; for (let p = 0; p < map.provinces.length; p++) if (S.P.owner[p] === n.id && map.provinces[p].k && S.P.pop[p] * (S.P.city[p] + 1) > bp) { bp = S.P.pop[p] * (S.P.city[p] + 1); b = p; } return b; };
   const cache = {}, pcache = {}; for (const n of alive) n.trade = 0;
+  const pc0 = pathComputes; const BUD = 14; // 이 번 계산 예산: 경로 결과는 캐시되어 다음 계산 때 이어진다
   for (const n of alive) {
     const nb = neighborsOf(S, n);
     for (const [m, info] of nb) {
@@ -502,8 +503,14 @@ function stepDiplomacy(S, map) {
         const ap = pcache[n.id] ?? (pcache[n.id] = topPort(n)), bp = pcache[t.id] ?? (pcache[t.id] = topPort(t));
         if (ap >= 0 && bp >= 0) { const pa = map.provinces[ap], pb = map.provinces[bp]; wpath = findWaterPath(map, pa.ax, pa.ay, pb.ax, pb.ay); if (wpath) { a = ap; b = bp; sea = 1; } }
         if (a >= 0 && b >= 0 && S.routes.length < 90 && (sea || info.land)) {
-          S.routes.push(sea ? [a, b, 1, wpath] : [a, b, 0]);
-          if (sea) { const k = tkey(n.id, m); if (!S.seaPairs[k]) { S.seaPairs[k] = 1; if (n.pc + t.pc >= 5) addLog(S, `${n.name}와(과) ${t.name} 사이에 바닷길이 열렸습니다. 무역선이 오갑니다.`, 1, a, n.id, m); } }
+          if (sea) {
+            S.routes.push([a, b, 1, wpath]);
+            const k = tkey(n.id, m); if (!S.seaPairs[k]) { S.seaPairs[k] = 1; if (n.pc + t.pc >= 5) addLog(S, `${n.name}와(과) ${t.name} 사이에 바닷길이 열렸습니다. 무역선이 오갑니다.`, 1, a, n.id, m); }
+          } else { // 육로: 지상 마스크 위 경로를 찾아 붙인다. 예산 부족이면 다음 계산으로 미룬다
+            const pa2 = map.provinces[a], pb2 = map.provinces[b];
+            const lp = pathComputes - pc0 < BUD ? findLandPath(map, pa2.ax, pa2.ay, pb2.ax, pb2.ay) : null;
+            S.routes.push(lp ? [a, b, 0, lp] : [a, b, 0]);
+          }
         }
       }
     }
@@ -511,7 +518,7 @@ function stepDiplomacy(S, map) {
   // 비교우위 항로: 이웃이 아니어도 서로 모자란 물자와 남는 물자가 맞물리는 항구 도시국가끼리 먼 바닷길을 연다
   const linked = new Set(); for (const n of alive) for (const m of Object.keys(n.relat)) linked.add(tkey(n.id, +m));
   const traders = alive.filter((n) => n.tech > 1.5 && n.eco && n.pc >= 1 && (pcache[n.id] ?? (pcache[n.id] = topPort(n))) >= 0);
-  const pc0 = pathComputes; const BUD = 10; let nr = 0; const T = traders.length; const off = T ? (((Math.floor(S.year / 5) % T) + T) % T) : 0;
+  let nr = 0; const T = traders.length; const off = T ? (((Math.floor(S.year / 5) % T) + T) % T) : 0;
   for (let ii = 0; ii < T && pathComputes - pc0 < BUD && S.routes.length < 230; ii++) {
     const n = traders[(ii + off) % T]; const pa = map.provinces[pcache[n.id]]; const rng2 = 160 + 28 * Math.min(6, n.tech);
     const cands = [];
@@ -531,7 +538,35 @@ function stepDiplomacy(S, map) {
       const k = tkey(n.id, m.id); if (!S.seaPairs[k]) { S.seaPairs[k] = 1; if (n.pc + m.pc >= 5) addLog(S, `${n.name}와(과) ${m.name} 사이에 먼 바닷길이 열렸습니다. 서로 모자란 물자를 실어 나릅니다.`, 1, pcache[n.id], n.id, m.id); }
     }
   }
+  // 비교우위 육로: 항구가 없는 내륙 국가도 같은 땅덩어리 위에서 대상(짐짐이 행렬) 교역을 연다
+  const routePair = new Set();
+  for (const r of S.routes) { const oa = S.P.owner[r[0]], ob = S.P.owner[r[1]]; if (oa >= 0 && ob >= 0 && oa !== ob) routePair.add(tkey(oa, ob)); }
+  const lands = alive.filter((n) => n.tech > 1.2 && n.eco && n.pc >= 1 && (cache[n.id] ?? (cache[n.id] = topCity(n))) >= 0);
+  const L2 = lands.length; const off2 = L2 ? (((Math.floor(S.year / 5) + 3) % L2) + L2) % L2 : 0;
+  for (let ii = 0; ii < L2 && pathComputes - pc0 < BUD && S.routes.length < 230; ii++) {
+    const n = lands[(ii + off2) % L2]; const pa = map.provinces[cache[n.id]];
+    const nInland = (pcache[n.id] ?? (pcache[n.id] = topPort(n))) < 0;
+    const rng3 = 120 + 22 * Math.min(6, n.tech);
+    const cands = [];
+    for (const m of lands) {
+      if (m.id === n.id) continue;
+      if (routePair.has(tkey(n.id, m.id))) continue;
+      if (S.wars.some((w) => (w.A.includes(n.id) && w.D.includes(m.id)) || (w.A.includes(m.id) && w.D.includes(n.id)))) continue;
+      const pb = map.provinces[cache[m.id]]; const d = Math.hypot(pa.ax - pb.ax, pa.ay - pb.ay); if (d > rng3 || d < 8) continue;
+      const mInland = (pcache[m.id] ?? (pcache[m.id] = topPort(m))) < 0;
+      const sc = complement(n, m) * (nInland || mInland ? 1.5 : 1) / (1 + d / 160); if (sc > 0.3) cands.push([sc, m]);
+    }
+    cands.sort((x, y) => y[0] - x[0]);
+    let made = 0;
+    for (let ci = 0; ci < Math.min(4, cands.length) && made < 2 && pathComputes - pc0 < BUD; ci++) {
+      const m = cands[ci][1]; const pb = map.provinces[cache[m.id]];
+      const lp = findLandPath(map, pa.ax, pa.ay, pb.ax, pb.ay); if (!lp) continue;
+      made++; S.routes.push([cache[n.id], cache[m.id], 0, lp]); n.trade++; m.trade++; routePair.add(tkey(n.id, m.id));
+      const k = tkey(n.id, m.id); if (!S.landPairs[k]) { S.landPairs[k] = 1; if (n.pc + m.pc >= 5) addLog(S, `${n.name}와(과) ${m.name} 사이에 육로가 열렸습니다. 짐짐이 대상이 오갑니다.`, 1, cache[n.id], n.id, m.id); }
+    }
+  }
   syncShips(S, map);
+  syncCaravans(S, map);
 }
 function stepGov(S, map) {
   for (const n of S.nations) {
@@ -630,6 +665,75 @@ function computeWaterPath(map, C, ax, ay, bx, by) {
   }
   return out;
 }
+// 육로 경로탐색: 지상 마스크 위에서 육지만 지나는 길을 BFS로 찾는다. 못 찾으면 null (육로 억제)
+const landAt = (map, x, y) => x >= 0 && y >= 0 && x < map.W && y < map.H && !!map.land[(y | 0) * map.W + (x | 0)];
+function snapToLand(map, x, y, maxR = 48) {
+  const xi = Math.round(x), yi = Math.round(y);
+  if (landAt(map, xi, yi)) return [xi, yi];
+  for (let r = 1; r <= maxR; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+    if (landAt(map, xi + dx, yi + dy)) return [xi + dx, yi + dy];
+  }
+  return null;
+}
+function segAllLand(map, x1, y1, x2, y2) {
+  const n = Math.ceil(Math.hypot(x2 - x1, y2 - y1));
+  for (let i = 0; i <= n; i++) {
+    const f = n ? i / n : 0, x = x1 + (x2 - x1) * f, y = y1 + (y2 - y1) * f;
+    if (!landAt(map, x, y) || !landAt(map, Math.round(x), Math.round(y))) return false;
+  }
+  return true;
+}
+const landBfs = new WeakMap(); // 수역 탐색과 같은 형태의 캐시 (지도별)
+export function findLandPath(map, ax, ay, bx, by) {
+  let C = landBfs.get(map);
+  if (!C) { C = { prev: new Int32Array(map.W * map.H), dist: new Int32Array(map.W * map.H), queue: new Int32Array(map.W * map.H), paths: new Map() }; landBfs.set(map, C); }
+  const key = Math.round(ax) + '_' + Math.round(ay) + '_' + Math.round(bx) + '_' + Math.round(by);
+  if (C.paths.has(key)) return C.paths.get(key);
+  const path = computeLandPath(map, C, ax, ay, bx, by);
+  C.paths.set(key, path);
+  return path;
+}
+function computeLandPath(map, C, ax, ay, bx, by) {
+  pathComputes++;
+  const A = snapToLand(map, ax, ay), B = snapToLand(map, bx, by);
+  if (!A || !B) return null;
+  const W = map.W, prev = C.prev, dist = C.dist, queue = C.queue;
+  const maxLen = Math.max(120, Math.hypot(bx - ax, by - ay) * 1.7); // 너무 돌아가는 육로는 억제
+  const si = A[1] * W + A[0], ti = B[1] * W + B[0];
+  dist.fill(-1); dist[si] = 0; prev[si] = -1;
+  let qh = 0, qt = 0; queue[qt++] = si;
+  while (qh < qt) {
+    const cur = queue[qh++];
+    if (cur === ti) break;
+    const cx = cur % W, cy = (cur / W) | 0, d = dist[cur];
+    if (d > maxLen + 40) continue;
+    for (let k = 0; k < 8; k++) {
+      const nx = cx + DX8[k], ny = cy + DY8[k];
+      if (!landAt(map, nx, ny)) continue;
+      if (k >= 4 && (!landAt(map, cx + DX8[k], cy) || !landAt(map, cx, cy + DY8[k]))) continue;
+      const ni = ny * W + nx;
+      if (dist[ni] !== -1) continue;
+      dist[ni] = d + 1; prev[ni] = cur; queue[qt++] = ni;
+    }
+  }
+  if (dist[ti] === -1 || dist[ti] > maxLen) return null;
+  const raw = []; for (let c = ti; c !== -1; c = prev[c]) raw.push([c % W, (c / W) | 0]); raw.reverse();
+  const pts = [raw[0]];
+  for (let i = 1; i < raw.length - 1; i++) {
+    const dx1 = Math.sign(raw[i][0] - raw[i - 1][0]), dy1 = Math.sign(raw[i][1] - raw[i - 1][1]);
+    const dx2 = Math.sign(raw[i + 1][0] - raw[i][0]), dy2 = Math.sign(raw[i + 1][1] - raw[i][1]);
+    if (dx1 !== dx2 || dy1 !== dy2) pts.push(raw[i]);
+  }
+  pts.push(raw[raw.length - 1]);
+  const out = [pts[0]]; let i = 0;
+  while (i < pts.length - 1) {
+    let j = pts.length - 1;
+    while (j > i + 1 && !segAllLand(map, pts[i][0], pts[i][1], pts[j][0], pts[j][1])) j = Math.max(i + 1, i + ((j - i) >> 1));
+    out.push(pts[j]); i = j;
+  }
+  return out;
+}
 export function pathLen(path) { let L = 0; for (let i = 1; i < path.length; i++) L += Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]); return L; }
 // 폴리라인 위 호장 비율 t (0~1) 의 위치와 진행 각도
 export function pathPos(path, t) {
@@ -644,7 +748,13 @@ export function pathPos(path, t) {
 // 구 세이브(모식 항로) 마이그레이션: 바닷길·탐험 경로를 수역 경로로 재계산하고 못 찾으면 억제
 export function upgradeSeas(S, map) {
   S.routes = (S.routes || []).map((r) => {
-    if (!r[2] || (r[3] && r[3].length >= 2)) return r;
+    if (!r[2]) { // 육로: 구 저장에는 경유지가 없다. 지상 경로를 찾아 붙인다
+      if (r[3] && r[3].length >= 2) return r;
+      const a = map.provinces[r[0]], b = map.provinces[r[1]]; if (!a || !b) return r;
+      const w = findLandPath(map, a.ax, a.ay, b.ax, b.ay);
+      return w ? [r[0], r[1], 0, w] : r;
+    }
+    if (r[3] && r[3].length >= 2) return r;
     const a = map.provinces[r[0]], b = map.provinces[r[1]]; if (!a || !b) return null;
     const w = findWaterPath(map, a.ax, a.ay, b.ax, b.ay);
     return w ? [r[0], r[1], 1, w] : null;
@@ -656,6 +766,7 @@ export function upgradeSeas(S, map) {
   }
   S.exped = (S.exped || []).filter((e) => !e.dead);
   syncShips(S, map);
+  syncCaravans(S, map);
 }
 // 항로 재계산(5년) 때 무역선 배정을 맞춘다: 사라진 항로의 배는 회수, 새 항로에는 배를 띄움
 function syncShips(S, map) {
@@ -668,6 +779,19 @@ function syncShips(S, map) {
     const len = Math.hypot(pa.ax - pb.ax, pa.ay - pb.ay);
     const target = Math.min(3, 1 + (len > 130 ? 1 : 0) + (len > 260 ? 1 : 0));
     for (let i = have; i < target; i++) S.ships.push({ a: r[0], b: r[1], t: S.rng.next(), dir: S.rng.chance(0.5) ? 1 : -1, nat: S.P.owner[r[0]], cargo: null });
+  }
+}
+// 육로 재계산 때 대상 배정을 맞춘다: 사라진 육로의 대상은 회수(화물은 판매국에 반환), 새 육로에는 대상을 보냄
+function syncCaravans(S, map) {
+  S.carr = S.carr || [];
+  const want = new Map();
+  for (const r of S.routes) if (!r[2] && r[3] && r[3].length >= 2) want.set(r[0] + '_' + r[1], r);
+  S.carr = S.carr.filter((s) => { if (want.has(s.a + '_' + s.b)) return true; refundCargo(S, s); return false; });
+  for (const [k, r] of want) {
+    const have = S.carr.reduce((c, s) => c + (s.a === r[0] && s.b === r[1] ? 1 : 0), 0);
+    const len = pathLen(r[3]);
+    const target = Math.min(2, 1 + (len > 120 ? 1 : 0));
+    for (let i = have; i < target; i++) S.carr.push({ a: r[0], b: r[1], t: S.rng.next(), dir: S.rng.chance(0.5) ? 1 : -1, nat: S.P.owner[r[0]], cargo: null });
   }
 }
 // 탐험선 출항: 연안 국가가 먼 바다 건너 미개척 해안으로 정착 원정을 보낸다
@@ -714,6 +838,19 @@ function stepSeas(S, map) {
     if (s.t >= 1 || s.t <= 0) {
       const port = s.t >= 1 ? s.b : s.a; s.t = clamp(s.t, 0, 1); s.dir = -s.dir;
       const fxg = dockShip(S, map, s, port, addLog); if (fxg !== false) S.fxQueue.push([port, 'trade', fxg]);
+      const hi = Math.max(P.tech[s.a], P.tech[s.b]), lo = Math.min(P.tech[s.a], P.tech[s.b]);
+      if (hi > lo && P.pop[port] > 15) { const q = P.tech[s.a] < P.tech[s.b] ? s.a : s.b; P.tech[q] += (hi - lo) * 0.012; }
+    }
+  }
+  // 대상: 육로를 왕복한다. 도착 때 화물을 내리고(무역선보다 적게 싣고 느리다) 지식이 오간다
+  const lmap = new Map(); for (const r of S.routes) if (!r[2] && r[3] && r[3].length >= 2) lmap.set(r[0] + '_' + r[1], r[3]);
+  for (const s of S.carr || []) {
+    const pa = prv[s.a], pb = prv[s.b]; const wp = lmap.get(s.a + '_' + s.b);
+    const len = wp ? pathLen(wp) : Math.hypot(pa.ax - pb.ax, pa.ay - pb.ay);
+    s.t += s.dir / Math.max(3, len / 20);
+    if (s.t >= 1 || s.t <= 0) {
+      const port = s.t >= 1 ? s.b : s.a; s.t = clamp(s.t, 0, 1); s.dir = -s.dir;
+      const fxg = dockShip(S, map, s, port, addLog, true); if (fxg !== false) S.fxQueue.push([port, 'trade', fxg]);
       const hi = Math.max(P.tech[s.a], P.tech[s.b]), lo = Math.min(P.tech[s.a], P.tech[s.b]);
       if (hi > lo && P.pop[port] > 15) { const q = P.tech[s.a] < P.tech[s.b] ? s.a : s.b; P.tech[q] += (hi - lo) * 0.012; }
     }
@@ -985,7 +1122,7 @@ export function restore(json) {
   const S = typeof json === 'string' ? JSON.parse(json) : json;
   if (!S.P.km) S.P.km = new Array(S.P.pop.length).fill(1);
   for (const k of Object.keys(TYPED)) S.P[k] = TYPED[k].from(S.P[k]);
-  const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1; S.recentCaps = S.recentCaps || []; S.warHist = S.warHist || []; S.buffs = S.buffs || []; S.ships = S.ships || []; S.exped = S.exped || []; S.seaPairs = S.seaPairs || {}; ensureEco(S);
+  const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1; S.recentCaps = S.recentCaps || []; S.warHist = S.warHist || []; S.buffs = S.buffs || []; S.ships = S.ships || []; S.carr = S.carr || []; S.exped = S.exped || []; S.seaPairs = S.seaPairs || {}; S.landPairs = S.landPairs || {}; ensureEco(S);
   for (const w of S.wars) { w.caps = w.caps || []; w.A0 = w.A0 || [...w.A]; w.D0 = w.D0 || [...w.D]; }
   for (const n of S.nations) if (!n.hist || !n.hist.length) n.hist = [[S.year, Math.round(n.pop || 0), n.pc || 0, n.stab == null ? 0.5 : Math.round(n.stab * 1000) / 1000]];
   return S;

@@ -48,8 +48,10 @@ export function newEco() {
 export function ensureEco(S) {
   if (!S.trade) S.trade = { deliv: new Array(NG).fill(0), value: 0, voyages: 0, seen: {}, log: 0 };
   const T = S.trade; if (!T.load) { T.load = new Array(NG).fill(0); T.unl = new Array(NG).fill(0); T.lost = new Array(NG).fill(0); T.paid = 0; T.recv = 0; }
+  if (T.voyL === undefined) T.voyL = 0;
   for (const n of S.nations) if (!n.eco) n.eco = newEco();
   for (const sh of S.ships || []) if (sh.cargo === undefined) sh.cargo = null;
+  for (const cv of S.carr || []) if (cv.cargo === undefined) cv.cargo = null;
 }
 const TECHF = (t) => 1 + 0.09 * Math.min(t, 6);
 
@@ -123,9 +125,11 @@ function needOf(n, g, inb) { const e = n.eco; return Math.max(0, 10 * Math.max(0
 export function inbound(S) {
   const m = {};
   for (const sh of S.ships || []) if (sh.cargo) { const k = sh.cargo.to * NG + sh.cargo.g; m[k] = (m[k] || 0) + sh.cargo.amt; }
+  for (const cv of S.carr || []) if (cv.cargo) { const k = cv.cargo.to * NG + cv.cargo.g; m[k] = (m[k] || 0) + cv.cargo.amt; }
   return m;
 }
 export function shipCapacity(n) { return 16 + 16 * Math.min(6, n.tech); }
+export function caravanCapacity(n) { return 7 + 7 * Math.min(6, n.tech); } // 대상은 배보다 적게 싣는다
 // 입항: 화물 하역·정산 후 반대편에 실을 화물을 고른다.
 // 화물을 판매국 비축으로 되돌린다 (항로 소멸·구매국 멸망 등). 판매국도 없으면 유실로 기록한다.
 export function refundCargo(S, s) {
@@ -134,7 +138,7 @@ export function refundCargo(S, s) {
   if (seller && seller.alive && seller.eco) { seller.eco.stock[c.g] += c.amt; S.trade.load[c.g] -= c.amt; } else S.trade.lost[c.g] += c.amt;
 }
 // 입항: 화물 하역·정산 후 반대편에 실을 화물을 고른다. 대금은 하역 때 한 번만, 구매국 국고에서 판매국 국고로 옮겨진다.
-export function dockShip(S, map, s, port, addLog) {
+export function dockShip(S, map, s, port, addLog, land = false) {
   ensureEco(S);
   const P = S.P, T = S.trade; const here = P.owner[port] >= 0 ? S.nations[P.owner[port]] : null;
   const otherP = port === s.a ? s.b : s.a; const there = P.owner[otherP] >= 0 ? S.nations[P.owner[otherP]] : null;
@@ -148,16 +152,16 @@ export function dockShip(S, map, s, port, addLog) {
       const pr = c.pr; const can = Math.min(c.amt, buyer.eco.wealth / pr); const part = can < c.amt;
       if (can > 0.01) {
         const val = can * pr; buyer.eco.wealth -= val; T.paid += val;
-        const amt = can * 0.96; const was = buyer.eco.sat[c.g];
-        buyer.eco.stock[c.g] += amt; buyer.eco.imp[c.g] += amt; T.unl[c.g] += can; T.lost[c.g] += can - amt; T.deliv[c.g] += amt; T.value += val; T.voyages++;
+        const amt = can * (land ? 0.97 : 0.96); const was = buyer.eco.sat[c.g];
+        buyer.eco.stock[c.g] += amt; buyer.eco.imp[c.g] += amt; T.unl[c.g] += can; T.lost[c.g] += can - amt; T.deliv[c.g] += amt; T.value += val; if (land) T.voyL = (T.voyL || 0) + 1; else T.voyages++;
         buyer.eco.partners[c.from] = (buyer.eco.partners[c.from] || 0) + val;
         if (seller && seller.alive && seller.eco) { seller.eco.wealth += val; seller.eco.exp[c.g] += can; seller.eco.partners[buyer.id] = (seller.eco.partners[buyer.id] || 0) + val; T.recv += val; }
         else T.recv += val; // 판매국이 이미 사라졌다면 대금은 장부에서만 소멸 (유실 기록)
         fx = c.g;
         const key = c.from + '_' + buyer.id + '_' + c.g;
         if (buyer.pc + (seller ? seller.pc : 0) >= 4) {
-          if (c.g === 0 && was < 0.75 && S.year - buyer.eco.lastLog > 25) { buyer.eco.lastLog = S.year; addLog(S, `${seller ? seller.name : '먼 나라'}의 곡물선이 ${buyer.name}에 닿아 굶주림을 덜었습니다.`, 2, port, buyer.id, c.from); }
-          else if (!T.seen[key] && S.year - T.log > 4 && (c.g >= 2)) { T.seen[key] = 1; T.log = S.year; addLog(S, `${seller ? seller.name : '먼 나라'}의 ${GOODS[c.g].name} 무역선이 ${buyer.name}의 항구에 처음 닿았습니다.`, c.g >= 3 ? 2 : 1, port, buyer.id, c.from); }
+          if (c.g === 0 && was < 0.75 && S.year - buyer.eco.lastLog > 25) { buyer.eco.lastLog = S.year; addLog(S, land ? `${seller ? seller.name : '먼 나라'}의 곡물을 실은 대상이 ${buyer.name}에 닿아 굶주림을 덜었습니다.` : `${seller ? seller.name : '먼 나라'}의 곡물선이 ${buyer.name}에 닿아 굶주림을 덜었습니다.`, 2, port, buyer.id, c.from); }
+          else if (!T.seen[key] && S.year - T.log > 4 && (c.g >= 2)) { T.seen[key] = 1; T.log = S.year; addLog(S, land ? `${seller ? seller.name : '먼 나라'}의 ${GOODS[c.g].name} 대상이 ${buyer.name}에 처음 닿았습니다.` : `${seller ? seller.name : '먼 나라'}의 ${GOODS[c.g].name} 무역선이 ${buyer.name}의 항구에 처음 닿았습니다.`, c.g >= 3 ? 2 : 1, port, buyer.id, c.from); }
         }
       }
       if (part) { const rest = c.amt - Math.max(0, can); if (seller && seller.alive && seller.eco) { seller.eco.stock[c.g] += rest; T.load[c.g] -= rest; } else T.lost[c.g] += rest; }
@@ -168,7 +172,7 @@ export function dockShip(S, map, s, port, addLog) {
     const inb = inbound(S); let best = -1, bs = 0, bam = 0;
     for (let g = 0; g < NG; g++) {
       const price = GOODS[g].price * (1 + 1.2 * (1 - there.eco.sat[g]));
-      const am = Math.min(Math.max(shipCapacity(here), 5 * there.eco.dem[g]), surplus(here, g), needOf(there, g, inb), there.eco.wealth / price * 0.9);
+      const am = Math.min(Math.max(land ? caravanCapacity(here) : shipCapacity(here), 5 * there.eco.dem[g]), surplus(here, g), needOf(there, g, inb), there.eco.wealth / price * 0.9);
       if (am < Math.max(1.2, there.eco.dem[g] * 0.03)) continue;
       const sc = am * price * (1 + (g === 0 ? 0.8 * (1 - there.eco.sat[0]) : 0)); if (sc > bs) { bs = sc; best = g; bam = am; }
     }

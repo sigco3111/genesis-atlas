@@ -258,13 +258,20 @@ export class Renderer {
     // 교역로 (육상: 금색 점선, 해상: 하늘색 점선) + 무역선
     if (this.showTrade && S.routes) {
       ctx.lineWidth = Math.max(1, z * 0.35); ctx.setLineDash([z * 1.2, z * 1.6]); ctx.lineDashOffset = -this.time * 12;
-      const rpaths = new Map();
+      const rpaths = new Map(), lpaths = new Map();
       for (const r of S.routes) {
         const a = map.provinces[r[0]], b = map.provinces[r[1]];
         if (r[2]) { // 해상: 검증된 수역 경유지 폴리라인
           if (!r[3] || r[3].length < 2) continue;
           rpaths.set(r[0] + '_' + r[1], r[3]);
           ctx.strokeStyle = 'rgba(140,205,255,0.5)';
+          ctx.beginPath();
+          for (let i = 0; i < r[3].length; i++) { const [sx, sy] = this.w2s(r[3][i][0], r[3][i][1]); if (i) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy); }
+          ctx.stroke(); continue;
+        }
+        if (r[3] && r[3].length >= 2) { // 육로: 검증된 지상 경유지 폴리라인
+          lpaths.set(r[0] + '_' + r[1], r[3]);
+          ctx.strokeStyle = 'rgba(255,225,140,0.55)';
           ctx.beginPath();
           for (let i = 0; i < r[3].length; i++) { const [sx, sy] = this.w2s(r[3][i][0], r[3][i][1]); if (i) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy); }
           ctx.stroke(); continue;
@@ -288,6 +295,21 @@ export class Renderer {
           drawShip(ctx, px, py, ang, ss, nn && nn.alive ? `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})` : null, '#f2ead8', sh.cargo ? sh.cargo.g : -1);
           ctx.globalAlpha = 1;
           if (sh.cargo && z >= 3.5) { ctx.font = '600 10px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(5,15,28,.85)'; const tx = GOODS[sh.cargo.g].name + ' ' + Math.round(sh.cargo.amt); ctx.strokeText(tx, px, py + ss * 1.9); ctx.fillStyle = goodCss(sh.cargo.g); ctx.fillText(tx, px, py + ss * 1.9); }
+        }
+      }
+      // 대상: 육로를 따라 왕복하는 짐짐이 행렬
+      if (S.carr && S.carr.length) {
+        const ss = Math.max(3.6, Math.min(8, 2.6 * Math.sqrt(z)));
+        for (const sh of S.carr) {
+          const wp = lpaths.get(sh.a + '_' + sh.b); if (!wp) continue;
+          const [wx, wy, ang] = pathPos(wp, sh.t);
+          const [px, py] = this.w2s(wx, wy);
+          if (px < -20 || py < -20 || px > this.cssW + 20 || py > this.cssH + 20) continue;
+          const nn = S.nations[sh.nat];
+          ctx.globalAlpha = Math.min(1, 0.3 + 3 * Math.min(sh.t, 1 - sh.t));
+          drawCaravan(ctx, px, py, ang, ss, nn && nn.alive ? `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})` : null, sh.cargo ? sh.cargo.g : -1, this.time + sh.a * 0.7);
+          ctx.globalAlpha = 1;
+          if (sh.cargo && z >= 3.5) { ctx.font = '600 10px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(5,15,28,.85)'; const tx = GOODS[sh.cargo.g].name + ' ' + Math.round(sh.cargo.amt); ctx.strokeText(tx, px, py - ss * 1.7); ctx.fillStyle = goodCss(sh.cargo.g); ctx.fillText(tx, px, py - ss * 1.7); }
         }
       }
     }
@@ -502,6 +524,37 @@ function drawShip(ctx, x, y, ang, s, flag, sail, cargo = -1) {
   if (flag) { ctx.fillStyle = flag; ctx.fillRect(s * 0.05, -s * 1.62, s * 0.55, s * 0.3); }
   // 화물: 갑판 위 자원색 상자
   if (cargo >= 0) { const c = GOODS[cargo].rgb; ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`; ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = Math.max(0.6, s * 0.06); for (let i = 0; i < 3; i++) { const bx = -s * 0.7 + i * s * 0.42, by = -s * 0.2 - (i === 1 ? s * 0.22 : 0); ctx.fillRect(bx, by, s * 0.34, s * 0.3); ctx.strokeRect(bx, by, s * 0.34, s * 0.3); } }
+  ctx.restore();
+}
+// 짐짐이 대상: 진행 방향으로 걷는 짐승, 등에 국가색 안장과 자원색 짐
+function drawCaravan(ctx, x, y, ang, s, trim, cargo = -1, tm = 0) {
+  ctx.save(); ctx.translate(x, y);
+  const flip = Math.cos(ang) < 0; // 왼쪽으로 갈 때는 뒤집어 넘어지지 않게
+  ctx.rotate(flip ? ang - Math.PI : ang); if (flip) ctx.scale(1, -1);
+  const ph = tm * 9; const st = Math.sin(ph) * s * 0.1;
+  ctx.translate(0, -Math.abs(Math.cos(ph)) * s * 0.05); // 걸을 때 살짝 통통
+  // 다리
+  ctx.strokeStyle = '#33261a'; ctx.lineWidth = Math.max(1, s * 0.13); ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.5, s * 0.08); ctx.lineTo(-s * 0.5 + st, s * 0.6);
+  ctx.moveTo(-s * 0.16, s * 0.1); ctx.lineTo(-s * 0.16 - st, s * 0.6);
+  ctx.moveTo(s * 0.2, s * 0.1); ctx.lineTo(s * 0.2 + st, s * 0.6);
+  ctx.moveTo(s * 0.5, s * 0.08); ctx.lineTo(s * 0.5 - st, s * 0.6);
+  ctx.stroke();
+  // 꼬리
+  ctx.beginPath(); ctx.moveTo(-s * 0.68, -s * 0.12); ctx.quadraticCurveTo(-s * 1.0, 0, -s * 0.92, s * 0.34); ctx.lineWidth = Math.max(0.8, s * 0.09); ctx.strokeStyle = '#4a3826'; ctx.stroke();
+  // 몸통
+  ctx.fillStyle = '#7a5a36';
+  ctx.beginPath(); ctx.ellipse(0, -s * 0.08, s * 0.72, s * 0.4, 0, 0, 7); ctx.fill();
+  // 목·머리·귀
+  ctx.strokeStyle = '#7a5a36'; ctx.lineWidth = Math.max(1.2, s * 0.2);
+  ctx.beginPath(); ctx.moveTo(s * 0.5, -s * 0.22); ctx.quadraticCurveTo(s * 0.85, -s * 0.5, s * 1.0, -s * 0.72); ctx.stroke();
+  ctx.fillStyle = '#7a5a36'; ctx.beginPath(); ctx.arc(s * 1.02, -s * 0.74, s * 0.19, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(s * 0.95, -s * 0.88); ctx.lineTo(s * 1.03, -s * 1.04); ctx.lineWidth = Math.max(0.7, s * 0.07); ctx.stroke();
+  // 안장(국가색)
+  ctx.fillStyle = trim || '#8a2f2f'; ctx.fillRect(-s * 0.4, -s * 0.5, s * 0.8, s * 0.28);
+  // 짐: 자원색 상자
+  if (cargo >= 0) { const c = GOODS[cargo].rgb; ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`; ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = Math.max(0.6, s * 0.06); for (let i = 0; i < 2; i++) { const bx = -s * 0.32 + i * s * 0.38, by = -s * 0.86; ctx.fillRect(bx, by, s * 0.3, s * 0.36); ctx.strokeRect(bx, by, s * 0.3, s * 0.36); } }
   ctx.restore();
 }
 // 권능·재해 발동 효과: 종류별로 구분되는 모양으로 그린다.

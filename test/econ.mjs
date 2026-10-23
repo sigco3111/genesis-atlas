@@ -14,12 +14,21 @@ const summarize = (S, label) => {
   const al = S.nations.filter((n) => n.alive && n.pc >= 2);
   const avg = (f) => al.reduce((a, n) => a + f(n), 0) / Math.max(1, al.length);
   const low = (g) => al.filter((n) => n.eco.sat[g] < 0.8).length;
-  console.log(label, 'year', S.year, 'nations', al.length, 'pop', Math.round(S.stats.world), 'sat', GOODS.map((g, i) => g.name + ' ' + avg((n) => n.eco.sat[i]).toFixed(2) + '(<0.8:' + low(i) + ')').join(' '), 'lift%p', lift(al), 'deliv', S.trade.deliv.map((v) => Math.round(v)).join('/'), 'voy', S.trade.voyages, 'val', Math.round(S.trade.value), 'foodShort(pop-yr)', Math.round(S.foodShort||0));
+  console.log(label, 'year', S.year, 'nations', al.length, 'pop', Math.round(S.stats.world), 'sat', GOODS.map((g, i) => g.name + ' ' + avg((n) => n.eco.sat[i]).toFixed(2) + '(<0.8:' + low(i) + ')').join(' '), 'lift%p', lift(al), 'deliv', S.trade.deliv.map((v) => Math.round(v)).join('/'), 'voy', S.trade.voyages, 'voyL', S.trade.voyL || 0, 'carr', (S.carr || []).length, 'val', Math.round(S.trade.value), 'foodShort(pop-yr)', Math.round(S.foodShort||0));
   return al;
 };
 const A = run(false, 600), B = run(true, 600);
 const aa = summarize(A, 'trade '), bb = summarize(B, 'notrade');
 ok(A.trade.voyages > 20, '무역선 화물 하역 20회 이상 (' + A.trade.voyages + ')');
+ok((A.carr || []).length > 0, '육상 대상 배정됨 (' + (A.carr || []).length + ')');
+ok((A.trade.voyL || 0) > 0, '대상 화물 하역 발생 (' + (A.trade.voyL || 0) + ')');
+// 육로 경로 무결성: 경유지 전 구간이 육지
+const allLand = (m, path) => { for (let i = 1; i < path.length; i++) { const n = Math.ceil(Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1])); for (let k = 0; k <= n; k++) { const f = n ? k / n : 0; const x = Math.round(path[i - 1][0] + (path[i][0] - path[i - 1][0]) * f), y = Math.round(path[i - 1][1] + (path[i][1] - path[i - 1][1]) * f); if (x < 0 || y < 0 || x >= m.W || y >= m.H || !m.land[y * m.W + x]) return false; } } return true; };
+const landR = A.routes.filter((r) => !r[2]);
+console.log('육로', landR.length, '경유지 있는 육로', landR.filter((r) => r[3]).length);
+ok(landR.filter((r) => r[3]).length > 0, '경유지 있는 육로 존재');
+ok(landR.every((r) => !r[3] || allLand(earth, r[3])), '육로 경유지 전 구간 육지 (지구)');
+for (const cv of A.carr) ok(cv.t >= 0 && cv.t <= 1 && earth.provinces[cv.a] && earth.provinces[cv.b], '대상 상태 유효');
 ok(!A.nations.some((n) => n.eco.sat.some((v) => !Number.isFinite(v)) || !Number.isFinite(n.eco.wealth)), 'NaN 없음');
 // 교역이 있는 나라가 곡물 자급률이 높다
 const meanSat = (al) => al.reduce((a, n) => a + (n.eco.sat[0] + n.eco.sat[1] + n.eco.sat[2]) / 3, 0) / Math.max(1, al.length);
@@ -46,7 +55,7 @@ for (const [k, y] of [['archipelago', 9000], ['inland', 9000]]) {
 // 2c) 보존 법칙: 적재 = 하역 + 항해 중 + 유실, 대금 지급 = 수령, 비축·국고 음수 없음, 복원 후에도 이중 정산 없음
 { const check = (S, label) => {
     const T = S.trade; let bad = 0; for (let g = 0; g < NG; g++) {
-      let fl = 0; for (const sh of S.ships) if (sh.cargo && sh.cargo.g === g) fl += sh.cargo.amt;
+      let fl = 0; for (const sh of S.ships) if (sh.cargo && sh.cargo.g === g) fl += sh.cargo.amt; for (const cv of S.carr || []) if (cv.cargo && cv.cargo.g === g) fl += cv.cargo.amt;
       const shrink = T.unl[g] - T.deliv[g]; const rhs = T.unl[g] + fl + (T.lost[g] - shrink);
       if (Math.abs(T.load[g] - rhs) > 1e-3 * Math.max(1, T.load[g])) { bad++; console.log(label, GOODS[g].name, 'load', T.load[g], 'rhs', rhs); } }
     ok(bad === 0, label + ' 화물 보존 (적재=하역+항해중+유실)'); ok(Math.abs(T.paid - T.recv) < 1e-6 * Math.max(1, T.paid), label + ' 대금 지급=수령'); };
@@ -59,9 +68,10 @@ for (const [k, y] of [['archipelago', 9000], ['inland', 9000]]) {
   const C = sim.restore(js); const voy = C.ships.filter((s) => s.cargo).length; for (const n of C.nations) if (n.alive && n.id % 3 === 0) { for (let p = 0; p < earth.provinces.length; p++) if (C.P.owner[p] === n.id) C.P.owner[p] = -1; }
   for (let i = 0; i < 60; i++) sim.step(C, earth); check(C, '강제 멸망 60년 후'); ok(negs(C) === 0, '멸망 후 음수 없음'); console.log('화물 실은 배(복원 시점)', voy); }
 // 3) 구버전 저장 마이그레이션: eco/trade/cargo 필드가 없는 저장
-{ const S = run(false, 200); const J = JSON.parse(sim.serialize(S)); delete J.trade; for (const n of J.nations) delete n.eco; for (const sh of J.ships) delete sh.cargo;
+{ const S = run(false, 200); const J = JSON.parse(sim.serialize(S)); delete J.trade; delete J.carr; delete J.landPairs; for (const n of J.nations) delete n.eco; for (const sh of J.ships) delete sh.cargo;
   const R = sim.restore(J); for (let i = 0; i < 100; i++) sim.step(R, earth);
-  ok(R.nations.every((n) => n.eco) && R.trade, '구버전 저장 이어하기 정상'); }
+  ok(R.nations.every((n) => n.eco) && R.trade, '구버전 저장 이어하기 정상');
+  ok(Array.isArray(R.carr) && R.landPairs, '구버전 저장에 대상 필드 보장'); }
 // 4) 성능
 { const S = run(false, 100); const t0 = performance.now(); for (let i = 0; i < 200; i++) sim.step(S, earth); console.log('ms/year', ((performance.now() - t0) / 200).toFixed(2)); }
 console.log(fail ? 'FAILED ' + fail : 'ALL OK'); process.exit(fail ? 1 : 0);
