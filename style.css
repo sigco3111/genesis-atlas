@@ -54,7 +54,7 @@ select,input{background:#12304d;border:1px solid #35597f;border-radius:8px;paddi
 @media(max-width:760px){#toast{bottom:64px;top:auto;z-index:7;background:#000e;width:88%;text-align:center;border-radius:14px}}
 #track{position:fixed;left:10px;top:50px;width:240px;background:#0a1a2bee;border:1px solid #3a5f86;border-radius:12px;padding:10px 12px;z-index:5;box-shadow:0 4px 16px #0008;font-size:13px}
 #track .thead{display:flex;gap:6px;align-items:baseline;font-size:14px;margin-bottom:4px}
-#track .thead b{color:#fff}
+#track .thead b{color:#fff;word-break:keep-all}
 #track .thead span{color:#9bb3cc;font-size:12px;margin-left:auto}
 #track .trow{padding:2px 0;color:#cfe3ff}
 #track .trow em{font-style:normal;font-size:12px;color:#9bb3cc}
