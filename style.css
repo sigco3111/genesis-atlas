@@ -141,3 +141,7 @@ canvas#cmpSpark{width:100%;height:96px;background:#0b2036;border-radius:6px}
 .warcard .wbtns{margin-top:5px}
 .warcard .chip{background:#0e2033;border:1px solid #2a4a6a;color:#cfe3ff;border-radius:12px;padding:3px 9px;font-size:12px}
 .warcard .chip:hover{background:#1a3550}
+#pwarm:not(.hide){display:flex;align-items:center;gap:10px;padding:5px 8px 5px 14px;font-size:12px;cursor:default}
+#pwarm .armtxt{color:#ffe3a3;font-weight:600}
+#pwarm button{padding:3px 12px;font-size:12px;font-weight:600;background:#27333f;border:1px solid #4d7fb3;border-radius:8px;color:#eaf4ff;cursor:pointer}
+#pwarm button:hover{background:#3b7bc4}

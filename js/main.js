@@ -76,7 +76,7 @@ function boot() { console.log('boot', S.mode, S.year);
   $('start').classList.add('hide');
   R = new Renderer($('map'), map); if (!boot.done) { boot.done = true; bindInput(); window.addEventListener('resize', () => { R.resize(); needRefresh = true; }); requestAnimationFrame(loop); }
   R.capAge = readCapAge(); prevTrkWars = trackedWarIds(S);
-  R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = 'political'; R.sel = -1; R.trackId = S.track ? S.track.id : -1; cmpA = cmpB = -1; speed = window.__speed ?? 1; running = true; needRefresh = true; buildBars(); renderPanel(); renderTrack();
+  R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = 'political'; R.sel = -1; selPower = null; pwCount = 0; pwPending = null; updateArmChip(); R.trackId = S.track ? S.track.id : -1; cmpA = cmpB = -1; speed = window.__speed ?? 1; running = true; needRefresh = true; buildBars(); renderPanel(); renderTrack();
   let pref = null; try { pref = localStorage.getItem(PANEL_PREF); } catch (e) {}
   setPanelOpen(pref === null ? !isMobileLayout() : pref === '1', false);
   toast('휠·드래그로 이동, 지역을 눌러 살펴보세요');
@@ -196,9 +196,9 @@ function bindInput() {
   cv.addEventListener('wheel', (e) => { e.preventDefault(); R.zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
   const dist = () => { const a = [...pts.values()]; return Math.hypot(a[0][0] - a[1][0], a[0][1] - a[1][1]); };
   const mid = () => { const a = [...pts.values()]; return [(a[0][0] + a[1][0]) / 2, (a[0][1] + a[1][1]) / 2]; };
-  window.addEventListener('keydown', (e) => { if (e.key === ' ') { speed = speed ? 0 : prevSpeed; markBars(); e.preventDefault(); } });
+  window.addEventListener('keydown', (e) => { if (e.key === ' ') { speed = speed ? 0 : prevSpeed; markBars(); e.preventDefault(); } if (e.key === 'Escape' && selPower) { disarmPower(); toast('권능 선택을 해제했습니다'); } });
 }
-let selPower = null;
+let selPower = null, pwCount = 0;
 // ---------- 권능 미리보기 / 결과 요약 ----------
 const PW_GOOD = new Set(['bless', 'tribe', 'prophet', 'hero', 'peace']);
 const PW_ICON = { bless: '🌧', drought: '🏜', plague: '☠', quake: '💥', volcano: '🌋', meteor: '☄', tribe: '🛖', prophet: '📿', hero: '⭐', revolt: '🔥', peace: '🕊', war: '⚔' };
@@ -211,12 +211,33 @@ function pwEl(id) {
     el.dataset.fixed = '1';
     el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);background:#0a1a2bee;border:1px solid #3a5f86;border-radius:12px;padding:8px 14px;z-index:6;font-size:13px;max-width:92vw;text-align:center;box-shadow:0 4px 16px #0008;color:#e8eef5';
   }
-  el.style[isMobileLayout() ? 'top' : 'bottom'] = isMobileLayout() ? '44px' : '84px';
-  el.style[isMobileLayout() ? 'bottom' : 'top'] = 'auto';
+  const mob = isMobileLayout();
+  const useTop = mob && id !== 'pwarm'; // 사용 중 칩은 모바일에서도 아래에 둬 추적 카드·미리보기와 겹치지 않게 함
+  const off = id !== 'pwarm' && selPower ? 52 : 0; // 권능 사용 중 칩과 겹치지 않게 미리보기·결과 카드를 안쪽으로 내림
+  el.style[useTop ? 'top' : 'bottom'] = ((useTop ? 44 : id === 'pwarm' && mob ? 120 : 84) + off) + 'px';
+  el.style[useTop ? 'bottom' : 'top'] = 'auto';
   return el;
 }
 function touchUI() { return (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || lastPtr === 'touch'; }
 function powerColor(type, ok) { return !ok ? '#9aa7b5' : PW_GOOD.has(type) ? '#7fe08a' : '#ff6a55'; }
+// 권능 연속 사용: 한 번 고른 권능은 해제할 때까지 유지되고, 사용 중 칩이 상태와 해제 길을 보여 준다.
+function updateArmChip() {
+  const el = pwEl('pwarm');
+  if (!selPower) { el.classList.add('hide'); return; }
+  el.classList.remove('hide');
+  el.innerHTML = `<span class="armtxt">${PW_ICON[selPower] || ''} ${sim.POWERS[selPower].name} 사용 중${pwCount ? ' · ' + pwCount + '회' : ''}</span><button id="pwOff" title="권능 선택 해제">해제</button>`;
+  el.title = '지도를 눌러 같은 권능을 계속 사용할 수 있습니다';
+  el.querySelector('#pwOff').onclick = () => { disarmPower(); toast('권능 선택을 해제했습니다'); };
+}
+function armPower(type) {
+  if (selPower !== type) pwCount = 0;
+  selPower = type; pwPending = null; updateArmChip();
+}
+function disarmPower() {
+  selPower = null; pwCount = 0; pwPending = null;
+  if (R) R.setPowerPreview(null);
+  pwEl('pwhint').classList.add('hide'); updateArmChip();
+}
 function updatePowerPreview(p) {
   const hint = pwEl('pwhint');
   if (!selPower || p == null || p < 0) { R.setPowerPreview(null); hint.classList.add('hide'); return; }
@@ -235,7 +256,8 @@ function firePower(type, p) {
   const r = sim.applyPower(S, map, type, p);
   if (!r.ok) { toast(r.msg); pwPending = null; updatePowerPreview(p); return; }
   pwPending = null; R.setPowerPreview(null); pwEl('pwhint').classList.add('hide');
-  toast((PW_ICON[type] || '') + ' ' + sim.POWERS[type].name + ' 발동');
+  pwCount++; updateArmChip();
+  toast((PW_ICON[type] || '') + ' ' + sim.POWERS[type].name + ' 발동 (' + pwCount + '회) — 다른 지역에도 계속 쓸 수 있습니다');
   showPowerResult(type, p, r.diff);
   needRefresh = true; R.sel = p; R.paintHL();
 }
@@ -458,7 +480,7 @@ function renderPanel(auto) {
       }
     }
   } else if (tab === 'god') {
-    h = '<h3>신의 권능</h3><p>권능을 고르면 지도에 영향 범위와 예상 효과가 미리 보입니다. 지역을 눌러 발동하면 실제 변화를 요약해 보여 줍니다.</p>' + Object.entries(sim.POWERS).map(([k, v]) => `<button class="pw ${selPower === k ? 'on' : ''}" data-p="${k}">${v.name}<small>${v.desc}</small></button>`).join('');
+    h = '<h3>신의 권능</h3><p>권능을 고르면 지도에 영향 범위와 예상 효과가 미리 보입니다. 한 번 고른 권능은 해제할 때까지 여러 지역에 계속 사용할 수 있고, 발동할 때마다 실제 변화를 요약해 보여 줍니다.</p>' + Object.entries(sim.POWERS).map(([k, v]) => `<button class="pw ${selPower === k ? 'on' : ''}" data-p="${k}">${v.name}<small>${v.desc}</small></button>`).join('');
     h += `<button class="pw ${S.auto ? 'on' : ''}" id="autoBtn">자동 신 위임: ${S.auto ? '켜짐' : '꺼짐'}<small>신이 알아서 균형을 맞춥니다.</small></button>`;
   } else {
     h = '<h3>도움말</h3><p class="fine">드래그로 이동, 휠/핀치로 확대. 지역을 누르면 정보가 나옵니다. 위쪽 버튼으로 속도와 지도 모드를 바꾸고, 권능 탭에서 신의 힘을 쓰거나 자동 신 위임을 켜 보세요. 아무것도 하지 않아도 세계는 계속 흘러갑니다.</p><h3>설정</h3><button class="pw" id="bSave">지금 저장</button><button class="pw" id="bExp">파일로 내보내기</button><button class="pw" id="bImp">파일에서 불러오기</button><button class="pw" id="bNew">새 세계 시작</button><input type="file" id="fImp" class="hide" accept=".json">';
@@ -473,7 +495,7 @@ function renderPanel(auto) {
   for (const d of body.querySelectorAll('[data-lp]')) d.onclick = () => goTo(+d.dataset.lp);
   for (const d of body.querySelectorAll('[data-lf]')) d.onclick = () => { const v = +d.dataset.lf; logNat = v >= 0 ? v : null; panelSig = ''; renderPanel(); };
   for (const b of body.querySelectorAll('[data-nlog]')) b.onclick = () => { logNat = +b.dataset.nlog; tab = 'log'; panelSig = ''; renderPanel(); };
-  for (const b of body.querySelectorAll('[data-p]')) b.onclick = () => { selPower = selPower === b.dataset.p ? null : b.dataset.p; pwPending = null; if (!selPower) { R.setPowerPreview(null); pwEl('pwhint').classList.add('hide'); } toast(selPower ? '지도에 영향 범위가 보입니다. 대상 지역을 누르세요' : '취소'); panelSig = ''; renderPanel(); };
+  for (const b of body.querySelectorAll('[data-p]')) b.onclick = () => { if (selPower === b.dataset.p) { disarmPower(); toast('권능 선택을 해제했습니다'); } else { armPower(b.dataset.p); toast(sim.POWERS[selPower].name + ' 선택 — 지도를 눌러 사용하세요. 해제 전까지 여러 지역에 계속 쓸 수 있습니다'); } panelSig = ''; renderPanel(); };
   const q = (id) => body.querySelector('#' + id);
   for (const b of body.querySelectorAll('[data-cmp]')) b.onclick = () => addToCompare(+b.dataset.cmp);
   for (const b of body.querySelectorAll('[data-cmpgo]')) b.onclick = () => goTo(+b.dataset.cmpgo);
