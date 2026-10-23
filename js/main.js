@@ -2,7 +2,7 @@ import { generateMap, MAP_KINDS, buildEarth, W, H } from './world.js';
 import { Renderer } from './render.js';
 import * as sim from './sim.js';
 import { CAP_AGE_STEPS, nextCapAge, capAgeLabel, trackedWarIds, warEvents } from './warwatch.js';
-import { capsBySide } from './warhist.js';
+import { capsBySide, warMapPoints, fitWarView } from './warhist.js';
 import { METRICS, seriesOf, chartMax, commonWindow, changeOf, changeDir, fmtChange } from './cmptrend.js';
 import { yearStr, numStr, ERA_NAMES } from './names.js';
 const $ = (id) => document.getElementById(id);
@@ -76,7 +76,7 @@ function boot() { console.log('boot', S.mode, S.year);
   $('start').classList.add('hide');
   R = new Renderer($('map'), map); if (!boot.done) { boot.done = true; bindInput(); window.addEventListener('resize', () => { R.resize(); needRefresh = true; }); requestAnimationFrame(loop); }
   R.capAge = readCapAge(); prevTrkWars = trackedWarIds(S);
-  R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = 'political'; R.sel = -1; selPower = null; pwCount = 0; pwPending = null; updateArmChip(); R.trackId = S.track ? S.track.id : -1; cmpA = cmpB = -1; speed = window.__speed ?? 1; running = true; needRefresh = true; buildBars(); renderPanel(); renderTrack();
+  R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = 'political'; R.sel = -1; selPower = null; histWar = null; { const wv0 = $('warview'); if (wv0) wv0.classList.add('hide'); } pwCount = 0; pwPending = null; updateArmChip(); R.trackId = S.track ? S.track.id : -1; cmpA = cmpB = -1; speed = window.__speed ?? 1; running = true; needRefresh = true; buildBars(); renderPanel(); renderTrack();
   let pref = null; try { pref = localStorage.getItem(PANEL_PREF); } catch (e) {}
   setPanelOpen(pref === null ? !isMobileLayout() : pref === '1', false);
   toast('휠·드래그로 이동, 지역을 눌러 살펴보세요');
@@ -103,6 +103,29 @@ function focusWar(w) {
   if (wf && wf.pts.length) { x = wf.pts.reduce((t, p) => t + p[0], 0) / wf.pts.length; y = wf.pts.reduce((t, p) => t + p[1], 0) / wf.pts.length; }
   else { const A = S.nations[w.A[0]], D = S.nations[w.D[0]]; if (!A || !D) return false; x = (A.lx + D.lx) / 2; y = (A.ly + D.ly) / 2; }
   R.focusWorld(x, y, 3.5); needRefresh = true; return true;
+}
+// ---------- 끝난 전쟁 지도 표시 ----------
+let histWar = null;
+function showWarOnMap(sumId) {
+  const s = (S.warHist || []).find((x) => x.id === sumId);
+  const pts = s ? warMapPoints(S, map, s) : [];
+  if (!pts.length) { toast('지도에 표시할 점령 지점 기록이 없습니다'); return; }
+  const aN = s.nm[s.A[0]] || '?', dN = s.nm[s.D[0]] || '?';
+  histWar = { id: s.id, title: aN + ' 대 ' + dN, pts };
+  R.histWar = histWar;
+  const f = fitWarView(pts, R.cssW, R.cssH, R.minZ);
+  if (f) { R.focusWorld(f.x, f.y, f.z); needRefresh = true; }
+  const el = $('warview');
+  el.innerHTML = `<div class="wvtxt">🗺 <b>${histWar.title}</b> · ${yearStr(s.y0)}~${yearStr(s.y1)} · 점령 지점 ${pts.length}곳<em>과거 전쟁의 기록을 현재 지도 위에 표시 중 — 국경과 영토 색은 지금 상태입니다</em></div><button id="wvClose" title="표시 닫기">✕</button>`;
+  el.classList.remove('hide');
+  $('wvClose').onclick = () => { hideWarView(); panelSig = ''; renderPanel(); };
+  layoutFloaters();
+  if (isMobileLayout()) setPanelOpen(false);
+  toast('🗺 전쟁이 벌어진 곳을 지도에 표시합니다');
+}
+function hideWarView() {
+  histWar = null; if (R) R.histWar = null;
+  const el = $('warview'); if (el && !el.classList.contains('hide')) { el.classList.add('hide'); layoutFloaters(); }
 }
 $('swar').style.cursor = 'pointer'; $('swar').title = '눌러서 전선으로 이동';
 $('swar').onclick = () => {
@@ -234,7 +257,7 @@ function floatBase() {
 function layoutFloaters() {
   if (!isMobileLayout() || !document.body) return;
   let top = floatBase();
-  for (const id of ['pwhint', 'pwres']) {
+  for (const id of ['pwhint', 'pwres', 'warview']) {
     const el = $(id);
     if (el && !el.classList.contains('hide')) {
       el.style.top = top + 'px'; el.style.bottom = 'auto';
@@ -535,6 +558,7 @@ function renderPanel(auto) {
         };
         h += sideRow(aId) + sideRow(dId);
         if (s.big && s.big.length) h += '<div class="wbig">' + s.big.slice(-4).reverse().map((c) => `<div class="hasloc" data-lp="${c.q}" title="눌러서 위치로 이동">${sim.josa(`${yearStr(c.y)} · ${s.nm[c.t] || '?'}이(가) ${s.nm[c.f] || '?'}의 ${S.cityName[c.q] || S.provName[c.q] || '주요 도시'} 점령`)}</div>`).join('') + '</div>';
+        if (s.big && s.big.length) h += `<div class="wbtns"><button class="chip ${histWar && histWar.id === s.id ? 'on' : ''}" data-warmap="${s.id}">🗺 점령 지점 ${s.big.length}곳 지도에서 보기</button></div>`;
         h += '</div>';
       }
     }
@@ -559,6 +583,7 @@ function renderPanel(auto) {
   for (const b of body.querySelectorAll('[data-cmp]')) b.onclick = () => addToCompare(+b.dataset.cmp);
   for (const b of body.querySelectorAll('[data-cmpgo]')) b.onclick = () => goTo(+b.dataset.cmpgo);
   for (const b of body.querySelectorAll('[data-warfront]')) b.onclick = () => { const w = S.wars.find((x) => x.id === +b.dataset.warfront); if (focusWar(w)) toast('⚔ 전선으로 이동합니다'); };
+  for (const b of body.querySelectorAll('[data-warmap]')) b.onclick = () => { const id = +b.dataset.warmap; if (histWar && histWar.id === id) hideWarView(); else showWarOnMap(id); panelSig = ''; renderPanel(); };
   for (const b of body.querySelectorAll('[data-cmpm]')) b.onclick = () => { cmpMetric = b.dataset.cmpm; try { localStorage.setItem('genesis-atlas-cmpmetric', cmpMetric); } catch (e) {} panelSig = ''; renderPanel(); };
   const csa = q('cmpSelA'), csb = q('cmpSelB');
   if (csa) csa.onchange = () => { cmpA = +csa.value; panelSig = ''; renderPanel(); };

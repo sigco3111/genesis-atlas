@@ -81,6 +81,7 @@ export class Renderer {
     this.mode = 'political'; this.dirty = true; this.sel = -1; this.hover = -1; this.trackId = -1; this.effects = []; this.time = 0; this.capAge = 3;
     this.provColor = new Uint32Array(map.provinces.length); this.ownerKey = new Int32Array(map.provinces.length).fill(-1);
     this.warPts = [];
+    this.histWar = null;
     this.labels = []; this.showTrade = true; this.showLabels = true; this.warPairs = new Set();
     this.resize();
   }
@@ -288,6 +289,42 @@ export class Renderer {
       }
     }
     ctx.globalAlpha = 1; ctx.lineCap = 'butt';
+    // 끝난 전쟁 기록 보기: 현재 지도를 살짝 눌러 과거 점령 지점만 밝게 (현재 전선 표시와 구분)
+    if (this.histWar && this.histWar.pts && this.histWar.pts.length) {
+      const hw = this.histWar;
+      ctx.fillStyle = 'rgba(8,12,20,0.34)'; ctx.fillRect(0, 0, this.cssW, this.cssH);
+      const seq = hw.pts.slice().sort((a, b) => a.yr - b.yr);
+      if (seq.length > 1) {
+        ctx.globalAlpha = 0.55; ctx.strokeStyle = '#ffd24a'; ctx.lineWidth = 1.6;
+        ctx.setLineDash([7, 7]); ctx.lineDashOffset = -this.time * 10;
+        ctx.beginPath();
+        for (let i = 0; i < seq.length; i++) { const [sx, sy] = this.w2s(seq[i].x, seq[i].y); i ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy); }
+        ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+      }
+      for (let i = 0; i < hw.pts.length; i++) {
+        const p = hw.pts[i];
+        const [x, y] = this.w2s(p.x, p.y); if (x < -40 || y < -40 || x > this.cssW + 40 || y > this.cssH + 40) continue;
+        const pu = 0.75 + 0.25 * Math.sin(this.time * 3 + i * 1.3);
+        const col = `rgb(${p.rgb[0]},${p.rgb[1]},${p.rgb[2]})`;
+        const r = Math.max(7, Math.min(15, 5 * Math.sqrt(z)));
+        ctx.globalAlpha = 0.45 + 0.3 * pu;
+        ctx.strokeStyle = '#ffd24a'; ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]); ctx.lineDashOffset = -this.time * 12;
+        ctx.beginPath(); ctx.arc(x, y, r * 1.55, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+        ctx.globalAlpha = 0.96;
+        ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r * 0.82, 0, 7); ctx.fill();
+        ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(10,10,14,0.9)'; ctx.stroke();
+        if (z > 2.1) {
+          const fs = Math.max(10, Math.min(13, 9 + z * 0.5));
+          ctx.font = `700 ${fs}px "Noto Sans KR", system-ui, sans-serif`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(8,12,20,0.85)'; ctx.fillStyle = '#ffe9a8';
+          const lab = (p.place ? p.place + ' ' : '') + p.ylab;
+          ctx.strokeText(lab, x, y + r * 1.55 + fs * 0.9); ctx.fillText(lab, x, y + r * 1.55 + fs * 0.9);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
     // 권능 미리보기 조준 표시
     if (this.pvOn && this.pvCenter) {
       const [x, y] = this.w2s(this.pvCenter[0], this.pvCenter[1]);

@@ -1,5 +1,5 @@
 // 전쟁 결과 요약 테스트: 스냅샷·점령 집계·종전 요약, 멸망 종전, 구형 저장 호환, 실제 시뮬레이션 결합
-import { WARHIST_MAX, WARCAPS_MAX, BIGCAPS_MAX, snapWar, recordCap, rostersOf, capsBySide, buildSummary, pushSummary, deltaOf } from '../js/warhist.js';
+import { WARHIST_MAX, WARCAPS_MAX, BIGCAPS_MAX, snapWar, recordCap, rostersOf, capsBySide, buildSummary, pushSummary, deltaOf, warMapPoints, fitWarView } from '../js/warhist.js';
 import { loadEarthNode } from './loadearth.mjs';
 import * as sim from '../js/sim.js';
 let fails = 0;
@@ -149,6 +149,48 @@ const ok = (cond, msg) => { if (!cond) { fails++; console.error('FAIL', msg); } 
   sim.endWar(S, map, w2, 'A');
   const s2 = S.warHist[S.warHist.length - 1];
   ok(se > 0 && s2.now[e.id][1] === 0 && s2.now[e.id][0] === 0, '멸망 경계: 종전 시점 소유 0을 정확히 반영');
+}
+
+// 10) 끝난 전쟁 지도 표시: 주요 점령을 지도 좌표로 변환
+{
+  const map = { provinces: [{ ax: 10, ay: 20 }, { ax: 40, ay: 60 }, { ax: 70, ay: 30 }] };
+  const S = { cityName: ['수도', '', ''], provName: ['평원', '산지', '벌판'] };
+  const sum = {
+    big: [{ q: 0, f: 1, t: 0, y: 100 }, { q: 1, f: 1, t: 0, y: 105 }, { q: 2, f: 0, t: 1, y: -44 }, { q: 9, f: 0, t: 1, y: 112 }],
+    rgb: { 0: [1, 2, 3] }, nm: { 0: '알파', 1: '베타' },
+  };
+  const pts = warMapPoints(S, map, sum);
+  ok(pts.length === 3, '지도 점: 없어진 지방(q9)의 기록은 건너뜀');
+  ok(pts[0].x === 10 && pts[0].y === 20 && pts[0].place === '수도' && pts[0].ylab === '서기 100년', '지도 점: 좌표·도시 이름·연도 라벨');
+  ok(pts[1].place === '산지', '지도 점: 도시 이름이 없으면 지방 이름');
+  ok(pts[0].rgb.join(',') === '1,2,3' && pts[2].rgb.join(',') === '255,210,74', '지도 점: 점령국 색, 기록 없으면 기본 금색');
+  ok(pts[2].t === '베타' && pts[2].ylab === '기원전 45년', '지도 점: 기원전 연도 라벨·점령국 이름');
+  ok(warMapPoints(S, map, null).length === 0 && warMapPoints(S, map, {}).length === 0, '지도 점: 요약·기록 없음이면 빈 배열');
+}
+
+// 11) 지도 표시 카메라 맞춤
+{
+  const pts = [{ x: 10, y: 20 }, { x: 70, y: 60 }];
+  const f = fitWarView(pts, 800, 600, 0.5);
+  ok(f && f.x === 40 && f.y === 40, '카메라 맞춤: 점들의 중심');
+  ok(f.z >= 0.5 && f.z <= 6, '카메라 맞춤: 줌은 제한 범위 안');
+  const f1 = fitWarView([{ x: 5, y: 7 }], 800, 600, 0.5);
+  ok(f1 && f1.x === 5 && f1.y === 7 && f1.z <= 6, '카메라 맞춤: 점 하나도 동작');
+  const fw = fitWarView([{ x: 0, y: 0 }, { x: 5000, y: 4000 }], 300, 200, 2);
+  ok(fw && fw.z === 2, '카메라 맞춤: 넓은 전역은 최소 줌 아래로 못 내려감');
+  ok(fitWarView([], 800, 600, 0.5) === null, '카메라 맞춤: 점 없으면 null');
+}
+
+// 12) 실제 시뮬레이션: 끝난 전쟁 요약에서 지도 점이 만들어짐
+{
+  const map = await loadEarthNode('./data');
+  const S = sim.createState(map, { mode: 'real', seed: 17 });
+  for (let i = 0; i < 400; i++) sim.step(S, map);
+  const withBig = (S.warHist || []).filter((x) => x.big && x.big.length);
+  if (withBig.length) {
+    const pts = warMapPoints(S, map, withBig[0]);
+    ok(pts.length > 0 && pts.every((p) => p.x >= 0 && p.y >= 0 && p.ylab), '실제 종전 요약에서 지도 점 생성');
+  } else ok(true, '실제 종전 요약에서 지도 점 생성 (400년 내 주요 점령 전쟁 없음 — 건너뜀)');
 }
 
 if (fails) { console.error(fails + '개 실패'); process.exit(1); }

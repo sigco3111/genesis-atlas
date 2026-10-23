@@ -1,4 +1,5 @@
 // 전쟁 결과 요약: 개전 스냅샷·점령 기록·종전 요약 집계 (순수 함수, 테스트 가능)
+import { yearStr } from './names.js';
 
 export const WARHIST_MAX = 60;   // 보관하는 종전 요약 최대 수 (오래된 것부터 덮어씀)
 export const WARCAPS_MAX = 600;  // 진행 중 전쟁이 기억하는 점령 기록 최대 수
@@ -66,4 +67,29 @@ export function pushSummary(S, sum) {
 export function deltaOf(before, after) {
   if (before == null || after == null) return null;
   return { d: after - before, pct: before > 0 ? (after - before) / before * 100 : null };
+}
+
+// 끝난 전쟁 지도 표시: 종전 요약의 주요 점령(big)을 지도 좌표로 변환. 사라진 지방의 기록은 건너뜀
+export function warMapPoints(S, map, sum) {
+  const pts = [];
+  for (const c of (sum && sum.big) || []) {
+    const o = map.provinces[c.q]; if (!o) continue;
+    pts.push({
+      p: c.q, x: o.ax, y: o.ay, yr: c.y, ylab: yearStr(c.y),
+      rgb: (sum.rgb && sum.rgb[c.t]) || [255, 210, 74],
+      t: (sum.nm && sum.nm[c.t]) || '?', f: (sum.nm && sum.nm[c.f]) || '?',
+      place: (S.cityName && S.cityName[c.q]) || (S.provName && S.provName[c.q]) || '',
+    });
+  }
+  return pts;
+}
+
+// 점들을 화면에 담는 카메라 위치·줌: { x, y, z }. 점이 없으면 null
+export function fitWarView(pts, cssW, cssH, minZ) {
+  if (!pts || !pts.length) return null;
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const p of pts) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
+  const bw = Math.max(30, x1 - x0), bh = Math.max(30, y1 - y0);
+  const z = Math.max(minZ, Math.min(6, Math.min(cssW / (bw + 120), cssH / (bh + 160))));
+  return { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z };
 }

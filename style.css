@@ -163,3 +163,11 @@ canvas#cmpSpark{width:100%;height:96px;background:#0b2036;border-radius:6px}
 #track.folded .thead b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:104px}
 #track.folded .thead span{white-space:nowrap}
 @media(max-width:760px){#pwres .prhead{font-size:12px}#pwres .prbtns .foldbtn{padding:2px 6px}}
+
+#warview:not(.hide){position:fixed;left:50%;top:52px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;background:#1a1607f2;border:1px solid #ffd24a;border-radius:12px;padding:8px 14px;z-index:6;font-size:13px;max-width:92vw;box-shadow:0 4px 18px #000a}
+#warview .wvtxt{color:#ffe9a8;min-width:0}
+#warview .wvtxt b{color:#fff}
+#warview .wvtxt em{display:block;font-style:normal;font-size:11px;color:#cbb26a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#warview button{flex:none;background:#3a2f10;border:1px solid #ffd24a;color:#ffe9a8;border-radius:8px;padding:2px 8px}
+#warview button:hover{background:#5a4a18}
+@media(max-width:760px){#warview:not(.hide){top:44px;width:94vw;font-size:12px}}
