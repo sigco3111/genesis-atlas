@@ -2,6 +2,7 @@
 import { W, H, BIOMES } from './world.js';
 import { planLabels, nationBudget, cityBudget } from './labels.js';
 import { visibleCaps, capAlpha } from './warwatch.js';
+import { pathPos } from './sim.js';
 const S2 = 2, TW = W * S2, TH = H * S2;
 const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 const BCOL = [null, '#e8eef1', '#b4bfad', '#5b7d5a', '#6c9856', '#a8b45e', '#d6c086', '#b8b061', '#3e7d48', '#8a8377', '#f3f5f7', '#b2ad73'].map((c) => c && hex(c));
@@ -240,29 +241,34 @@ export class Renderer {
     // 교역로 (육상: 금색 점선, 해상: 하늘색 점선) + 무역선
     if (this.showTrade && S.routes) {
       ctx.lineWidth = Math.max(1, z * 0.35); ctx.setLineDash([z * 1.2, z * 1.6]); ctx.lineDashOffset = -this.time * 12;
+      const rpaths = new Map();
       for (const r of S.routes) {
-        const a = map.provinces[r[0]], b = map.provinces[r[1]]; const [x1, y1] = this.w2s(a.ax, a.ay), [x2, y2] = this.w2s(b.ax, b.ay);
+        const a = map.provinces[r[0]], b = map.provinces[r[1]];
+        if (r[2]) { // 해상: 검증된 수역 경유지 폴리라인
+          if (!r[3] || r[3].length < 2) continue;
+          rpaths.set(r[0] + '_' + r[1], r[3]);
+          ctx.strokeStyle = 'rgba(140,205,255,0.5)';
+          ctx.beginPath();
+          for (let i = 0; i < r[3].length; i++) { const [sx, sy] = this.w2s(r[3][i][0], r[3][i][1]); if (i) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy); }
+          ctx.stroke(); continue;
+        }
+        const [x1, y1] = this.w2s(a.ax, a.ay), [x2, y2] = this.w2s(b.ax, b.ay);
         if (Math.abs(x1 - x2) > this.cssW * 1.2) continue;
-        ctx.strokeStyle = r[2] ? 'rgba(140,205,255,0.5)' : 'rgba(255,225,140,0.55)';
+        ctx.strokeStyle = 'rgba(255,225,140,0.55)';
         ctx.beginPath(); ctx.moveTo(x1, y1); const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.hypot(x2 - x1, y2 - y1) * 0.12; ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke();
       }
       ctx.setLineDash([]);
-      // 무역선: 항로 호를 따라 왕복하는 돛단배
+      // 무역선: 수역 항로를 따라 왕복하는 돛단배
       if (S.ships && S.ships.length) {
         const ss = Math.max(4, Math.min(10, 3.0 * Math.sqrt(z)));
         for (const sh of S.ships) {
-          const a = map.provinces[sh.a], b = map.provinces[sh.b]; if (!a || !b) continue;
-          const [x1, y1] = this.w2s(a.ax, a.ay), [x2, y2] = this.w2s(b.ax, b.ay);
-          if (Math.abs(x1 - x2) > this.cssW * 1.2) continue;
-          const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.hypot(x2 - x1, y2 - y1) * 0.12;
-          const tt = sh.dir > 0 ? sh.t : 1 - sh.t;
-          const u = 1 - tt;
-          const px = u * u * x1 + 2 * u * tt * mx + tt * tt * x2, py = u * u * y1 + 2 * u * tt * my + tt * tt * y2;
+          const wp = rpaths.get(sh.a + '_' + sh.b); if (!wp) continue;
+          const [wx, wy, ang] = pathPos(wp, sh.t);
+          const [px, py] = this.w2s(wx, wy);
           if (px < -20 || py < -20 || px > this.cssW + 20 || py > this.cssH + 20) continue;
-          const dx = 2 * u * (mx - x1) + 2 * tt * (x2 - mx), dy = 2 * u * (my - y1) + 2 * tt * (y2 - my);
           const nn = S.nations[sh.nat];
-          ctx.globalAlpha = Math.min(1, 0.3 + 3 * Math.min(tt, 1 - tt));
-          drawShip(ctx, px, py, Math.atan2(dy, dx), ss, nn && nn.alive ? `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})` : null, '#f2ead8');
+          ctx.globalAlpha = Math.min(1, 0.3 + 3 * Math.min(sh.t, 1 - sh.t));
+          drawShip(ctx, px, py, ang, ss, nn && nn.alive ? `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})` : null, '#f2ead8');
           ctx.globalAlpha = 1;
         }
       }
@@ -273,14 +279,17 @@ export class Renderer {
       for (const e of S.exped) {
         const nn = S.nations[e.n]; if (!nn || !e.pts) continue;
         const col = `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})`;
-        const [x1, y1] = this.w2s(e.pts[0][0], e.pts[0][1]), [x2, y2] = this.w2s(e.pts[1][0], e.pts[1][1]);
-        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.hypot(x2 - x1, y2 - y1) * 0.12;
-        const tt = Math.min(0.9999, Math.max(0, e.t)), u = 1 - tt;
-        const px = u * u * x1 + 2 * u * tt * mx + tt * tt * x2, py = u * u * y1 + 2 * u * tt * my + tt * tt * y2;
-        // 계획 항로 전체를 옅은 점선으로
+        if (e.pts.length < 2) continue;
+        const [x2, y2] = this.w2s(e.pts[e.pts.length - 1][0], e.pts[e.pts.length - 1][1]);
+        const tt = Math.min(0.9999, Math.max(0, e.t));
+        const [wx, wy, ang] = pathPos(e.pts, tt);
+        const [px, py] = this.w2s(wx, wy);
+        // 계획 항로 전체를 옅은 점선으로 (검증된 수역 경유지)
         ctx.globalAlpha = 0.4; ctx.strokeStyle = col; ctx.lineWidth = Math.max(1, z * 0.35);
         ctx.setLineDash([Math.max(2, z), Math.max(3, z * 1.4)]); ctx.lineDashOffset = -this.time * 8;
-        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke();
+        ctx.beginPath();
+        for (let i = 0; i < e.pts.length; i++) { const [sx, sy] = this.w2s(e.pts[i][0], e.pts[i][1]); if (i) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy); }
+        ctx.stroke();
         ctx.setLineDash([]); ctx.globalAlpha = 1;
         // 목적지 펄스 표시
         const pu = 0.5 + 0.5 * Math.sin(this.time * 3.5);
@@ -289,8 +298,7 @@ export class Renderer {
         ctx.beginPath(); ctx.arc(x2, y2, Math.max(6, Math.min(14, z * 2.2)) * (1 + pu * 0.25), 0, 7); ctx.stroke(); ctx.setLineDash([]);
         ctx.globalAlpha = 1;
         if (px < -30 || py < -30 || px > this.cssW + 30 || py > this.cssH + 30) continue;
-        const dx = 2 * u * (mx - x1) + 2 * tt * (x2 - mx), dy = 2 * u * (my - y1) + 2 * tt * (y2 - my);
-        drawShip(ctx, px, py, Math.atan2(dy, dx), ss * 1.25, col, '#fff6e0');
+        drawShip(ctx, px, py, ang, ss * 1.25, col, '#fff6e0');
       }
     }
     // 전쟁 시각화: 최근 점령(진격 화살표·점령 링) + 교전 지역 마커

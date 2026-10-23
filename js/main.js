@@ -66,7 +66,7 @@ $('go').onclick = async () => {
 $('cont').onclick = async () => {
   $('loadmsg').textContent = '불러오는 중...';
   try {
-    const raw = await unpack(localStorage.getItem(SAVE)); const s = sim.restore(raw); map = await getMap(s.mapKind, s.seed); S = s;
+    const raw = await unpack(localStorage.getItem(SAVE)); const s = sim.restore(raw); map = await getMap(s.mapKind, s.seed); S = s; sim.upgradeSeas(S, map);
     if (S.P.owner.length !== map.provinces.length) throw new Error('저장 데이터가 지도와 맞지 않습니다');
     sim.step(sim.restore(raw), map); // 부팅 점검
     boot();

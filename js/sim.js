@@ -495,11 +495,11 @@ function stepDiplomacy(S, map) {
       else if (allied && (r < 15 || rng.chance(0.01))) { n.allies = n.allies.filter((x) => x !== m); t.allies = t.allies.filter((x) => x !== n.id); addLog(S, `${n.name}와(과) ${t.name}의 동맹이 깨졌습니다.`, 1, n.cap, n.id, t.id); }
       if (!warring && r > -10 && n.tech > 1.5 && t.tech > 1.5) {
         n.trade++; t.trade++;
-        let a = cache[n.id] ?? (cache[n.id] = topCity(n)), b = cache[t.id] ?? (cache[t.id] = topCity(t)), sea = 0;
+        let a = cache[n.id] ?? (cache[n.id] = topCity(n)), b = cache[t.id] ?? (cache[t.id] = topCity(t)), sea = 0, wpath = null;
         const ap = pcache[n.id] ?? (pcache[n.id] = topPort(n)), bp = pcache[t.id] ?? (pcache[t.id] = topPort(t));
-        if (ap >= 0 && bp >= 0 && (!info.land || routeWaterFrac(map, ap, bp) > 0.45)) { a = ap; b = bp; sea = 1; }
-        if (a >= 0 && b >= 0 && S.routes.length < 90) {
-          S.routes.push([a, b, sea]);
+        if (ap >= 0 && bp >= 0) { const pa = map.provinces[ap], pb = map.provinces[bp]; wpath = findWaterPath(map, pa.ax, pa.ay, pb.ax, pb.ay); if (wpath) { a = ap; b = bp; sea = 1; } }
+        if (a >= 0 && b >= 0 && S.routes.length < 90 && (sea || info.land)) {
+          S.routes.push(sea ? [a, b, 1, wpath] : [a, b, 0]);
           if (sea) { const k = tkey(n.id, m); if (!S.seaPairs[k]) { S.seaPairs[k] = 1; if (n.pc + t.pc >= 5) addLog(S, `${n.name}와(과) ${t.name} 사이에 바닷길이 열렸습니다. 무역선이 오갑니다.`, 1, a, n.id, m); } }
         }
       }
@@ -530,14 +530,104 @@ function eraCheck(S, map) {
 }
 
 // ---------- 항해: 무역선·탐험선 (바닷길이 눈에 보이게 오간다) ----------
-// 두 지방을 잇는 직선이 바다 위를 지나는 비율 (해상 항로 판별용)
-function routeWaterFrac(map, a, b) {
-  const A = map.provinces[a], B = map.provinces[b]; let sea = 0; const K = 9;
-  for (let i = 1; i < K; i++) {
-    const f = i / K; const x = Math.round(A.ax + (B.ax - A.ax) * f), y = Math.round(A.ay + (B.ay - A.ay) * f);
-    if (x < 0 || y < 0 || x >= map.W || y >= map.H || !map.land[y * map.W + x]) sea++;
+// 수역 경로탐색: map.land 픽셀 마스크 위에서 물만 지나는 항로를 BFS로 찾는다. 못 찾으면 null (항로 억제)
+const waterAt = (map, x, y) => x >= 0 && y >= 0 && x < map.W && y < map.H && !map.land[(y | 0) * map.W + (x | 0)];
+// 항구 지방 중심에서 가장 가까운 수역 픽셀 = 배가 실제로 뜨는 해안 출발점
+function snapToWater(map, x, y, maxR = 48) {
+  const xi = Math.round(x), yi = Math.round(y);
+  if (waterAt(map, xi, yi)) return [xi, yi];
+  for (let r = 1; r <= maxR; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+    if (waterAt(map, xi + dx, yi + dy)) return [xi + dx, yi + dy];
   }
-  return sea / (K - 1);
+  return null;
+}
+// 직선 구간이 전체 해상도 마스크에서 물 위에만 있는지 1px 샘플링으로 검사
+function segAllWater(map, x1, y1, x2, y2) {
+  const n = Math.ceil(Math.hypot(x2 - x1, y2 - y1));
+  for (let i = 0; i <= n; i++) {
+    const f = n ? i / n : 0, x = x1 + (x2 - x1) * f, y = y1 + (y2 - y1) * f;
+    if (!waterAt(map, x, y) || !waterAt(map, Math.round(x), Math.round(y))) return false; // 절단·반올림 두 샘플링 모두 물이어야 함
+  }
+  return true;
+}
+const DX8 = [1, -1, 0, 0, 1, 1, -1, -1], DY8 = [0, 0, 1, -1, 1, -1, 1, -1];
+const bfsCache = new WeakMap(); // map -> { prev, dist, queue, paths } (경로 결과는 좌표 쌍별 캐시)
+export function findWaterPath(map, ax, ay, bx, by) {
+  let C = bfsCache.get(map);
+  if (!C) { C = { prev: new Int32Array(map.W * map.H), dist: new Int32Array(map.W * map.H), queue: new Int32Array(map.W * map.H), paths: new Map() }; bfsCache.set(map, C); }
+  const key = Math.round(ax) + '_' + Math.round(ay) + '_' + Math.round(bx) + '_' + Math.round(by);
+  if (C.paths.has(key)) return C.paths.get(key);
+  const path = computeWaterPath(map, C, ax, ay, bx, by);
+  C.paths.set(key, path);
+  return path;
+}
+function computeWaterPath(map, C, ax, ay, bx, by) {
+  const A = snapToWater(map, ax, ay), B = snapToWater(map, bx, by);
+  if (!A || !B) return null;
+  const W = map.W, prev = C.prev, dist = C.dist, queue = C.queue;
+  const maxLen = Math.max(140, Math.hypot(bx - ax, by - ay) * 2.4); // 지나치게 돌아가는 항로는 억제
+  const si = A[1] * W + A[0], ti = B[1] * W + B[0];
+  dist.fill(-1); dist[si] = 0; prev[si] = -1;
+  let qh = 0, qt = 0; queue[qt++] = si;
+  while (qh < qt) {
+    const cur = queue[qh++];
+    if (cur === ti) break;
+    const cx = cur % W, cy = (cur / W) | 0, d = dist[cur];
+    if (d > maxLen + 40) continue;
+    for (let k = 0; k < 8; k++) {
+      const nx = cx + DX8[k], ny = cy + DY8[k];
+      if (!waterAt(map, nx, ny)) continue;
+      if (k >= 4 && (!waterAt(map, cx + DX8[k], cy) || !waterAt(map, cx, cy + DY8[k]))) continue; // 대각선 코너 컷 금지
+      const ni = ny * W + nx;
+      if (dist[ni] !== -1) continue;
+      dist[ni] = d + 1; prev[ni] = cur; queue[qt++] = ni;
+    }
+  }
+  if (dist[ti] === -1 || dist[ti] > maxLen) return null;
+  const raw = []; for (let c = ti; c !== -1; c = prev[c]) raw.push([c % W, (c / W) | 0]); raw.reverse();
+  // 직진 구간 압축 후 string pulling: 건너뛴 각 구간은 전체 해상도로 물 위임을 검증
+  const pts = [raw[0]];
+  for (let i = 1; i < raw.length - 1; i++) {
+    const dx1 = Math.sign(raw[i][0] - raw[i - 1][0]), dy1 = Math.sign(raw[i][1] - raw[i - 1][1]);
+    const dx2 = Math.sign(raw[i + 1][0] - raw[i][0]), dy2 = Math.sign(raw[i + 1][1] - raw[i][1]);
+    if (dx1 !== dx2 || dy1 !== dy2) pts.push(raw[i]);
+  }
+  pts.push(raw[raw.length - 1]);
+  const out = [pts[0]]; let i = 0;
+  while (i < pts.length - 1) {
+    let j = pts.length - 1;
+    while (j > i + 1 && !segAllWater(map, pts[i][0], pts[i][1], pts[j][0], pts[j][1])) j = Math.max(i + 1, i + ((j - i) >> 1));
+    out.push(pts[j]); i = j;
+  }
+  return out;
+}
+export function pathLen(path) { let L = 0; for (let i = 1; i < path.length; i++) L += Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]); return L; }
+// 폴리라인 위 호장 비율 t (0~1) 의 위치와 진행 각도
+export function pathPos(path, t) {
+  let d = pathLen(path) * Math.min(1, Math.max(0, t));
+  for (let i = 1; i < path.length; i++) {
+    const dx = path[i][0] - path[i - 1][0], dy = path[i][1] - path[i - 1][1], l = Math.hypot(dx, dy);
+    if (d <= l || i === path.length - 1) { const f = l ? Math.min(1, d / l) : 0; return [path[i - 1][0] + dx * f, path[i - 1][1] + dy * f, Math.atan2(dy, dx)]; }
+    d -= l;
+  }
+  return [path[0][0], path[0][1], 0];
+}
+// 구 세이브(모식 항로) 마이그레이션: 바닷길·탐험 경로를 수역 경로로 재계산하고 못 찾으면 억제
+export function upgradeSeas(S, map) {
+  S.routes = (S.routes || []).map((r) => {
+    if (!r[2] || (r[3] && r[3].length >= 2)) return r;
+    const a = map.provinces[r[0]], b = map.provinces[r[1]]; if (!a || !b) return null;
+    const w = findWaterPath(map, a.ax, a.ay, b.ax, b.ay);
+    return w ? [r[0], r[1], 1, w] : null;
+  }).filter(Boolean);
+  for (const e of S.exped || []) {
+    const a = map.provinces[e.from], b = map.provinces[e.target];
+    const w = a && b ? findWaterPath(map, a.ax, a.ay, b.ax, b.ay) : null;
+    if (w) { e.pts = w; e.dist = Math.round(pathLen(w)); } else e.dead = true;
+  }
+  S.exped = (S.exped || []).filter((e) => !e.dead);
+  syncShips(S, map);
 }
 // 항로 재계산(5년) 때 무역선 배정을 맞춘다: 사라진 항로의 배는 회수, 새 항로에는 배를 띄움
 function syncShips(S, map) {
@@ -562,31 +652,36 @@ export function maybeLaunchExpedition(S, map, n) {
   if (port < 0 || bp < 30) return false;
   const A = prv[port];
   const maxRange = 60 + n.tech * 50, minRange = 12;
-  let best = -1, bs = 0;
+  const cands = [];
   for (let q = 0; q < prv.length; q++) {
     const o = prv[q];
     if (!o.k || P.owner[q] >= 0 || o.fert <= 0.03) continue;
     if (P.pop[q] >= (capacity(S, map, q) || 1) * 0.35) continue;
     const d = Math.hypot(o.ax - A.ax, o.ay - A.ay);
     if (d < minRange || d > maxRange) continue;
-    if (routeWaterFrac(map, port, q) < 0.55) continue; // 항로 대부분이 바다여야 배가 간다
-    const sc = o.fert * (1 + d / 150) + rng.next() * 0.35;
-    if (sc > bs) { bs = sc; best = q; }
+    cands.push([o.fert * (1 + d / 150) + rng.next() * 0.35, q]);
+  }
+  cands.sort((x, y) => y[0] - x[0]);
+  let best = -1, wpath = null;
+  for (let ci = 0; ci < Math.min(8, cands.length); ci++) { // 점수 순으로 물 경로가 검증되는 첫 후보
+    const q = cands[ci][1]; const w = findWaterPath(map, A.ax, A.ay, prv[q].ax, prv[q].ay);
+    if (w) { best = q; wpath = w; break; }
   }
   if (best < 0) return false;
   const B = prv[best];
-  const dist = Math.hypot(B.ax - A.ax, B.ay - A.ay);
+  const dist = pathLen(wpath);
   const dur = clamp(Math.round(dist / (9 + n.tech * 3.5)), 2, 16);
-  S.exped.push({ n: n.id, from: port, target: best, pts: [[A.ax, A.ay], [B.ax, B.ay]], dist: Math.round(dist), t: 0, dur });
+  S.exped.push({ n: n.id, from: port, target: best, pts: wpath, dist: Math.round(dist), t: 0, dur });
   if (n.pc >= 2) addLog(S, `${n.name}의 탐험선이 ${S.provName[port] || '항구'}을(를) 떠나 먼 바다로 향합니다.`, 1, port, n.id);
   return true;
 }
 function stepSeas(S, map) {
   const P = S.P, prv = map.provinces;
   // 무역선: 항로를 왕복한다. 입항 때 두 항구 사이에 지식이 오간다
+  const rmap = new Map(); for (const r of S.routes) if (r[2] && r[3]) rmap.set(r[0] + '_' + r[1], r[3]);
   for (const s of S.ships) {
-    const pa = prv[s.a], pb = prv[s.b];
-    const len = Math.hypot(pa.ax - pb.ax, pa.ay - pb.ay);
+    const pa = prv[s.a], pb = prv[s.b]; const wp = rmap.get(s.a + '_' + s.b);
+    const len = wp ? pathLen(wp) : Math.hypot(pa.ax - pb.ax, pa.ay - pb.ay);
     s.t += s.dir / Math.max(3, len / 26);
     if (s.t >= 1 || s.t <= 0) {
       const port = s.t >= 1 ? s.b : s.a; s.t = clamp(s.t, 0, 1); s.dir = -s.dir;
