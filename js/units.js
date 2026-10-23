@@ -39,9 +39,19 @@ export function atWar(S, a, b) {
 }
 
 // 부대의 현재 전투력: 병력 × 기술 × 지형(고도) × 방패
+// 보급: 본국 수도에서 멀수록 전투력·소모가 나빠진다 (0.6~1)
+export function supplyOf(map, a) {
+  const h = map.provinces[a.home]; if (!h) return 1;
+  const d = Math.hypot(a.x - h.ax, a.y - h.ay);
+  return clamp(1 - Math.max(0, d - 160) / 700, 0.6, 1);
+}
+// 사기(0~1)·경험(0~1)은 옛 저장에 없을 수 있으므로 기본값을 둔다
+export const moraleOf = (a) => a.mor == null ? 1 : a.mor;
+export const xpOf = (a) => a.xp == null ? 0 : a.xp;
 export function armyStrength(S, map, a, defenderProv = -1) {
   const n = S.nations[a.nat]; if (!n) return 0;
   let s = a.men * (1 + 0.12 * n.tech) * unitOf(n).str;
+  s *= (0.73 + 0.27 * moraleOf(a)) * (1 + 0.28 * xpOf(a)) * supplyOf(map, a);
   if (defenderProv >= 0) s *= 1 + 0.3 * map.provinces[defenderProv].e;
   if (shieldOf(S, a.nat)) s *= 1.25;
   return s;
@@ -86,7 +96,7 @@ function muster(S, map, n, w) {
   P.pop[cap] -= men;
   S.armies.push({
     id: S.nextArmy++, nat: n.id, men, men0: men, x: A.ax, y: A.ay,
-    path, dlen: pathLen(path), prog: 0, tgt, home: cap, st: 'march', sg: 0, war: w.id,
+    path, dlen: pathLen(path), prog: 0, tgt, home: cap, st: 'march', sg: 0, war: w.id, mor: 1, xp: 0,
   });
   return true;
 }
@@ -114,11 +124,18 @@ export function battleTick(S, map, A, B) {
   const sB = armyStrength(S, map, B, provA) * rng.range(0.85, 1.15);
   const dA = Math.min(A.men, B.men * 0.26 * Math.sqrt(sB / Math.max(1, sA)) * rng.range(0.7, 1.3));
   const dB = Math.min(B.men, A.men * 0.26 * Math.sqrt(sA / Math.max(1, sB)) * rng.range(0.7, 1.3));
+  const mA0 = A.men, mB0 = B.men;
   A.men -= dA; B.men -= dB; S.deaths.war += dA + dB;
+  // 사기·경험: 손실이 큰 쪽은 사기가 꺾이고, 더 많이 쓰러뜨린 쪽은 경험과 사기를 얻는다
+  for (const [U, loss, dealt, m0] of [[A, dA, dB, mA0], [B, dB, dA, mB0]]) {
+    const lf = loss / Math.max(1, U.men0);
+    U.mor = clamp(moraleOf(U) - lf * 1.7 + (dealt > loss ? 0.035 : -0.01), 0, 1);
+    U.xp = clamp(xpOf(U) + 0.04 + (dealt > loss ? 0.05 : 0), 0, 1);
+  }
   if (S.year % 2 === 0) { const p = provA >= 0 ? provA : provB; if (p >= 0) S.fxQueue.push([p, 'war']); }
   for (const [U, sU, sF] of [[A, sA, sB], [B, sB, sA]]) {
     if (U.men < MIN_MEN) U.men = 0;
-    else if (U.men < U.men0 * RETREAT_FRAC && U.st !== 'retreat') {
+    else if ((U.men < U.men0 * RETREAT_FRAC || moraleOf(U) < 0.18) && U.st !== 'retreat') {
       const foe = U === A ? B : A; const fn = S.nations[foe.nat], un = S.nations[U.nat];
       if (un && fn && U.men0 + foe.men0 > 1500) addLog(S, `${fn.name}의 ${unitOf(fn).key}이(가) ${un.name}의 ${unitOf(un).key}을(를) 물리쳤습니다.`, 2, provAt(map, U.x, U.y), fn.id, un.id);
       retreat(S, map, U);
@@ -134,12 +151,12 @@ function siegeTick(S, map, a, w) {
   const o = map.provinces[q];
   const need = (1 + 0.45 * o.e + P.city[q] * 0.35) * (shieldOf(S, ow) ? 1.6 : 1);
   a.sg += a.men / (2600 * need);
-  const attr = a.men * 0.03; a.men -= attr; S.deaths.war += attr;
+  const attr = a.men * 0.03 * (2 - supplyOf(map, a)); a.men -= attr; S.deaths.war += attr;
   const drain = P.pop[q] * 0.012; P.pop[q] = Math.max(0, P.pop[q] - drain); S.deaths.war += drain;
   if (S.year % 2 === 0) S.fxQueue.push([q, 'war']);
   if (a.men < MIN_MEN) { a.men = 0; return; }
   if (a.sg >= 1) {
-    a.sg = 0;
+    a.sg = 0; a.xp = clamp(xpOf(a) + 0.12, 0, 1); a.mor = clamp(moraleOf(a) + 0.2, 0, 1);
     captureProvince(S, map, q, ow, a.nat, w, a.home);
     a.st = 'march'; a.tgt = -1; // 다음 목표는 stepArmies가 고른다
   }
@@ -194,6 +211,9 @@ export function stepArmies(S, map) {
       if (path) { a.path = path; a.dlen = pathLen(path); a.prog = 0; a.st = 'march'; }
       else { a.st = 'garrison'; a.path = null; } // 육로 불가: 주둔
     }
+    if (a.st === 'march') a.mor = clamp(moraleOf(a) + 0.03, 0, 1);
+    else if (a.st === 'garrison' || a.st === 'retreat') a.mor = clamp(moraleOf(a) + 0.06, 0, 1);
+    else if (a.st === 'siege' && supplyOf(map, a) < 0.8) a.mor = clamp(moraleOf(a) - 0.015, 0, 1);
     if (a.st === 'march' || a.st === 'retreat') {
       if (!a.path || a.dlen <= 0) { a.st = a.st === 'retreat' ? 'garrison' : a.st; a.tgt = a.st === 'garrison' ? a.tgt : -1; continue; }
       const elev = map.provinces[provAt(map, a.x, a.y) >= 0 ? provAt(map, a.x, a.y) : a.home] || { e: 0 };

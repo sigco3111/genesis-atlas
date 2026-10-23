@@ -84,4 +84,13 @@ let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log('FAIL', m); }
   const keys = ERA_UNITS.map((u) => u.key);
   ok(new Set(keys).size === 10, '병종 이름 10개 고유');
 }
+// 사기·경험·보급 (R1)
+{
+  const { supplyOf, moraleOf, xpOf } = await import('../js/units.js');
+  const map = await loadEarthNode('./data'); const S = sim.createState(map, { mode: 'emergent', seed: 5, hearths: 8, aggr: 2.5 });
+  const a0 = { nat: 0, men: 1000, men0: 1000, x: map.provinces[0].ax, y: map.provinces[0].ay, home: 0 };
+  ok(supplyOf(map, a0) === 1, '본국에서는 보급 1');
+  ok(supplyOf(map, { ...a0, x: a0.x + 900 }) === 0.6, '먼 원정은 보급 하한 0.6');
+  ok(moraleOf({}) === 1 && xpOf({}) === 0, '옛 저장 부대는 사기1·경험0 기본값');
+}
 console.log(fail ? 'FAILED ' + fail : 'ALL OK'); process.exit(fail ? 1 : 0);

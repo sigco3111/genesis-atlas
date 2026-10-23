@@ -481,7 +481,7 @@ export class Renderer {
           const px = bx + ox, py = by + oy;
           if (px < -30 || py < -30 || px > this.cssW + 30 || py > this.cssH + 30) continue;
           const col = `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})`;
-          drawArmy(ctx, px, py, ss, col, this.time + a.id * 0.9, a.st, Math.min(9, Math.max(0, Math.floor(nn.tech || 0))));
+          drawArmy(ctx, px, py, ss, col, this.time + a.id * 0.9, a.st, Math.min(9, Math.max(0, Math.floor(nn.tech || 0))), a);
           if (z >= 1.1) {
             const fs = Math.max(9.5, ss);
             ctx.font = '700 ' + fs + 'px system-ui,sans-serif'; ctx.textAlign = 'center';
@@ -584,7 +584,7 @@ function drawUnitGlyph(ctx, s, era) {
   }
 }
 
-function drawArmy(ctx, x, y, s, col, tm, st, era = 0) {
+function drawArmy(ctx, x, y, s, col, tm, st, era = 0, a = null) {
   ctx.save(); ctx.translate(x, y);
   const bob = st === 'march' || st === 'retreat' ? Math.abs(Math.sin(tm * 7)) * s * 0.12 : 0;
   ctx.translate(0, -bob);
@@ -599,12 +599,26 @@ function drawArmy(ctx, x, y, s, col, tm, st, era = 0) {
   ctx.beginPath(); ctx.roundRect(-s * 0.62, -s * 0.34, s * 1.24, s * 0.73, s * 0.2); ctx.fill();
   // 시대별 병종 표식
   drawUnitGlyph(ctx, s, era);
+  if (a) { // 병력·사기 막대, 경험 별, 포위 진행 호
+    const f = Math.max(0, Math.min(1, a.men / Math.max(1, a.men0))), mo = a.mor == null ? 1 : a.mor, bw = s * 1.56, bh = Math.max(2.2, s * 0.2), by = s * 0.62;
+    ctx.fillStyle = 'rgba(8,8,8,.88)'; ctx.fillRect(-bw / 2 - 0.8, by - 0.8, bw + 1.6, bh * 2 + 2.4);
+    ctx.fillStyle = f > 0.6 ? '#5ad36b' : f > 0.35 ? '#ffd24a' : '#ff5148'; ctx.fillRect(-bw / 2, by, bw * f, bh);
+    ctx.fillStyle = mo > 0.55 ? '#6cc7ff' : mo > 0.3 ? '#c9a8ff' : '#ff8fb0'; ctx.fillRect(-bw / 2, by + bh + 0.8, bw * mo, bh * 0.8);
+    const stars = Math.min(3, Math.floor((a.xp || 0) * 3.4));
+    ctx.fillStyle = '#ffd24a'; ctx.strokeStyle = 'rgba(40,24,0,.9)'; ctx.lineWidth = 0.8;
+    for (let i = 0; i < stars; i++) { const sx = -s * 0.62 + i * s * 0.36, sy = -s * 0.74, r = s * 0.17; ctx.beginPath(); for (let k = 0; k < 10; k++) { const ang = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? r * 0.45 : r; ctx.lineTo(sx + Math.cos(ang) * rr, sy + Math.sin(ang) * rr); } ctx.closePath(); ctx.fill(); ctx.stroke(); }
+    if (st === 'siege' && a.sg > 0) { ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = Math.max(2, s * 0.2); ctx.beginPath(); ctx.arc(0, 0, s * 1.35, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, a.sg)); ctx.stroke(); }
+  }
   // 깃발
   ctx.strokeStyle = '#2b2119'; ctx.lineWidth = Math.max(1, s * 0.1); ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(s * 0.5, -s * 0.4); ctx.lineTo(s * 0.5, -s * 1.5); ctx.stroke();
   ctx.fillStyle = col; ctx.fillRect(s * 0.5, -s * 1.5, s * 0.72, s * 0.42);
   ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = Math.max(0.6, s * 0.05); ctx.strokeRect(s * 0.5, -s * 1.5, s * 0.72, s * 0.42);
   // 상태 표시
+  if (st === 'battle') { // 교전 불꽃: 칩 둘레로 튀는 불티
+    for (let i = 0; i < 7; i++) { const ph = (tm * 2.4 + i * 0.37) % 1, ang = i * 2.4 + tm * 0.5, rr = s * (0.8 + ph * 1.1); ctx.globalAlpha = (1 - ph) * 0.95; ctx.fillStyle = i % 2 ? '#fff3b0' : '#ff9f43'; ctx.beginPath(); ctx.arc(Math.cos(ang) * rr, Math.sin(ang) * rr * 0.8, Math.max(1, s * 0.11 * (1 - ph)), 0, 7); ctx.fill(); }
+    ctx.globalAlpha = 1;
+  }
   if (st === 'battle') { // 교전: 붉은 교차 검 플래시
     const pu = 0.6 + 0.4 * Math.sin(tm * 9);
     ctx.globalAlpha = pu; ctx.strokeStyle = '#ff3b30'; ctx.lineWidth = Math.max(1.4, s * 0.16);
