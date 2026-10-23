@@ -459,14 +459,25 @@ export class Renderer {
     if (S.armies && S.armies.length && this.showArmies !== false) {
       // 모바일처럼 줌이 낮아도 읽히도록 최소 크기를 키우고, 같은 지점에 겹친 부대는 원형으로 벌린다
       const ss = Math.max(7.5, Math.min(12, 3.4 * Math.sqrt(z)));
+      // 부대 위치는 1년(한 틱)마다 갱신되므로, 프레임 사이를 부드럽게 보간해 행군이 눈에 보이게 한다
+      if (this.armySmS !== S) { this.armySm = new Map(); this.armySmS = S; }
+      const smSeen = new Set();
       const groups = new Map();
-      for (const a of S.armies) { const k = Math.round(a.x / 1.2) + ':' + Math.round(a.y / 1.2); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(a); }
+      for (const a of S.armies) {
+        smSeen.add(a.id);
+        let sm = this.armySm.get(a.id);
+        if (!sm || Math.hypot(a.x - sm.x, a.y - sm.y) > 60) { sm = { x: a.x, y: a.y }; } // 새 부대이거나 순간이동(재배치)이면 바로 맞춘다
+        else { const k = Math.min(1, (this.lastDt || 1 / 60) * 3.5); sm.x += (a.x - sm.x) * k; sm.y += (a.y - sm.y) * k; }
+        this.armySm.set(a.id, sm);
+        const k = Math.round(sm.x / 1.2) + ':' + Math.round(sm.y / 1.2); if (!groups.has(k)) groups.set(k, []); groups.get(k).push([a, sm]);
+      }
+      if (this.armySm.size > smSeen.size + 40) { for (const id of this.armySm.keys()) if (!smSeen.has(id)) this.armySm.delete(id); }
       for (const arr of groups.values()) {
         for (let gi = 0; gi < arr.length; gi++) {
-          const a = arr[gi]; const nn = S.nations[a.nat]; if (!nn) continue;
+          const [a, sm] = arr[gi]; const nn = S.nations[a.nat]; if (!nn) continue;
           let ox = 0, oy = 0;
           if (arr.length > 1) { const ang = (gi / arr.length) * Math.PI * 2 - Math.PI / 2; const rr = ss * 1.1; ox = Math.cos(ang) * rr; oy = Math.sin(ang) * rr; }
-          const [bx, by] = this.w2s(a.x, a.y);
+          const [bx, by] = this.w2s(sm.x, sm.y);
           const px = bx + ox, py = by + oy;
           if (px < -30 || py < -30 || px > this.cssW + 30 || py > this.cssH + 30) continue;
           const col = `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})`;

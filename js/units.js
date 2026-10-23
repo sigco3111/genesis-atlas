@@ -183,7 +183,7 @@ export function stepArmies(S, map) {
     if (!w) { a.men = 0; continue; } // 전쟁이 끝난 부대는 onWarEnd에서 해산됨
     if (a.st === 'battle') continue; // 회전은 아래에서 한 번에 처리
     // 목표 재선정
-    if (a.tgt < 0 || (a.st === 'march' && (!a.path || a.prog >= a.dlen) && P.owner[a.tgt] === a.nat)) {
+    if (a.tgt < 0 || (a.st === 'march' && (!a.path || (a.prog >= a.dlen && P.owner[a.tgt] === a.nat)))) { // 경로가 없으면 소유와 무관하게 목표를 다시 고른다
       const t = pickTarget(S, map, n, w);
       if (t < 0) { // 더 뺏을 곳이 없으면 귀환
         retreat(S, map, a); a.st = 'garrison'; continue;
@@ -241,7 +241,7 @@ export function stepArmies(S, map) {
         const p = provAt(map, A.x, A.y);
         addLog(S, `${S.nations[A.nat].name}의 ${unitOf(S.nations[A.nat]).key}과(과) ${S.nations[B.nat].name}의 ${unitOf(S.nations[B.nat]).key}이(가) ${S.provName[p] || '한 지방'}에서 격돌했습니다.`, 2, p >= 0 ? p : A.home, A.nat, B.nat);
       }
-      A.st = 'battle'; B.st = 'battle'; A.sg = 0;
+      A.st = 'battle'; B.st = 'battle'; // 포위 진행(sg)은 유지: 전투가 끝나면 포위를 이어간다
       battleTick(S, map, A, B);
     }
   }
@@ -249,7 +249,10 @@ export function stepArmies(S, map) {
   for (const a of S.armies) {
     if (a.st !== 'battle') continue;
     const engaged = S.armies.some((b) => b !== a && b.men > 0 && b.st === 'battle' && b.nat !== a.nat && atWar(S, a.nat, b.nat) && (a.x - b.x) ** 2 + (a.y - b.y) ** 2 <= BATTLE_RANGE * BATTLE_RANGE);
-    if (!engaged) { a.st = 'march'; }
+    if (!engaged) {
+      const backAtSiege = a.tgt >= 0 && a.path && a.prog >= a.dlen && P.owner[a.tgt] >= 0 && P.owner[a.tgt] !== a.nat && atWar(S, a.nat, P.owner[a.tgt]);
+      a.st = backAtSiege ? 'siege' : 'march';
+    }
   }
   // 4) 소멸한 부대 정리
   S.armies = S.armies.filter((a) => a.men >= MIN_MEN);
