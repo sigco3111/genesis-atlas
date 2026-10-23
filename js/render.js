@@ -1,6 +1,7 @@
 // 렌더러: 지형 사전 렌더(2배 해상도) + 정치/문화 등 오버레이 + 라벨/도시/효과
 import { W, H, BIOMES } from './world.js';
 import { planLabels, nationBudget, cityBudget } from './labels.js';
+import { visibleCaps, capAlpha } from './warwatch.js';
 const S2 = 2, TW = W * S2, TH = H * S2;
 const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 const BCOL = [null, '#e8eef1', '#b4bfad', '#5b7d5a', '#6c9856', '#a8b45e', '#d6c086', '#b8b061', '#3e7d48', '#8a8377', '#f3f5f7', '#b2ad73'].map((c) => c && hex(c));
@@ -77,7 +78,7 @@ export class Renderer {
     this.cells = buildCellIndex(map);
     // 지방 경계 마스크 (셀 단위로 이웃과 다른 지방)
     this.cam = { x: W / 2, y: H / 2, z: 1 }; this.minZ = 0.5;
-    this.mode = 'political'; this.dirty = true; this.sel = -1; this.hover = -1; this.trackId = -1; this.effects = []; this.time = 0;
+    this.mode = 'political'; this.dirty = true; this.sel = -1; this.hover = -1; this.trackId = -1; this.effects = []; this.time = 0; this.capAge = 3;
     this.provColor = new Uint32Array(map.provinces.length); this.ownerKey = new Int32Array(map.provinces.length).fill(-1);
     this.warPts = [];
     this.labels = []; this.showTrade = true; this.showLabels = true; this.warPairs = new Set();
@@ -247,10 +248,11 @@ export class Renderer {
       ctx.setLineDash([]);
     }
     // 전쟁 시각화: 최근 점령(진격 화살표·점령 링) + 교전 지역 마커
-    const caps = S.recentCaps || [];
+    const keep = this.capAge == null ? 3 : this.capAge;
+    const caps = visibleCaps(S.recentCaps, S.year, keep);
     for (const cp of caps) {
-      const age = S.year - cp.y; if (age > 3) continue;
-      const a1 = Math.max(0, 1 - age / 3.5);
+      const age = S.year - cp.y;
+      const a1 = capAlpha(age, keep);
       const nn = S.nations[cp.t]; const col = nn && nn.alive ? `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})` : '#cfd6dd';
       const o1 = map.provinces[cp.p], o2 = map.provinces[cp.q]; if (!o1 || !o2) continue;
       const [x1, y1] = this.w2s(o1.ax, o1.ay), [x2, y2] = this.w2s(o2.ax, o2.ay);

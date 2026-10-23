@@ -70,6 +70,8 @@ select,input{background:#12304d;border:1px solid #35597f;border-radius:8px;paddi
 #track .tnews div.hasloc::after{content:' 📍';font-size:9px;opacity:.75}
 #track .tbtns{display:flex;gap:6px;margin-top:8px}
 #track .tbtns button{flex:1;padding:5px 4px;font-size:12px}
+#track .twp{width:100%;margin-top:6px;padding:5px 4px;font-size:12px}
+#track .twp.on{background:#2a2410;border-color:#ffd24a;color:#ffe9a8}
 #track canvas{width:100%;height:40px;background:#0b2036;border-radius:6px;margin-top:6px}
 #track .thead{cursor:pointer}
 #track.folded{width:auto;padding:6px 10px}

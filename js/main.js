@@ -1,9 +1,14 @@
 import { generateMap, MAP_KINDS, buildEarth, W, H } from './world.js';
 import { Renderer } from './render.js';
 import * as sim from './sim.js';
+import { CAP_AGE_STEPS, nextCapAge, capAgeLabel, trackedWarIds, warEvents } from './warwatch.js';
 import { yearStr, numStr, ERA_NAMES } from './names.js';
 const $ = (id) => document.getElementById(id);
 const SAVE = 'genesis-atlas-save-v1';
+const CAPAGE_PREF = 'genesis-atlas-capage', WARPAUSE_PREF = 'genesis-atlas-warpause';
+let autoWarPause = false, prevTrkWars = [];
+try { autoWarPause = localStorage.getItem(WARPAUSE_PREF) === '1'; } catch (e) {}
+function readCapAge() { try { const v = +localStorage.getItem(CAPAGE_PREF); return CAP_AGE_STEPS.includes(v) ? v : 3; } catch (e) { return 3; } }
 let map = null, S = null, R = null, running = false, speed = 1, prevSpeed = 1, acc = 0, last = 0, tab = 'world', lastRefresh = 0, needRefresh = true, earthCache = null;
 const SPEEDS = [[0, '⏸'], [0.5, '0.5'], [1, '1'], [3, '3'], [10, '10'], [100, '100']];
 const MODES = [['political', '정치'], ['culture', '문화'], ['religion', '종교'], ['pop', '인구'], ['tech', '기술'], ['unrest', '불안'], ['terrain', '지형']];
@@ -68,6 +73,7 @@ $('cont').onclick = async () => {
 function boot() { console.log('boot', S.mode, S.year);
   $('start').classList.add('hide');
   R = new Renderer($('map'), map); if (!boot.done) { boot.done = true; bindInput(); window.addEventListener('resize', () => { R.resize(); needRefresh = true; }); requestAnimationFrame(loop); }
+  R.capAge = readCapAge(); prevTrkWars = trackedWarIds(S);
   R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = 'political'; R.sel = -1; R.trackId = S.track ? S.track.id : -1; cmpA = cmpB = -1; speed = window.__speed ?? 1; running = true; needRefresh = true; buildBars(); renderPanel(); renderTrack();
   let pref = null; try { pref = localStorage.getItem(PANEL_PREF); } catch (e) {}
   setPanelOpen(pref === null ? !isMobileLayout() : pref === '1', false);
@@ -80,6 +86,11 @@ function buildBars() {
   lb.classList.toggle('on', R.showLabels !== false);
   lb.onclick = () => { R.showLabels = R.showLabels === false; lb.classList.toggle('on', R.showLabels !== false); };
   $('modes').appendChild(lb);
+  const cb = document.createElement('button'); cb.id = 'capBtn';
+  const paintCap = () => { cb.textContent = '점령 ' + capAgeLabel(R.capAge); cb.classList.toggle('on', R.capAge > 0); cb.title = '점령 화살표·링을 몇 년 동안 지도에 남길지 바꿉니다 (누를 때마다 3년 → 10년 → 30년 → 끄기)'; };
+  paintCap();
+  cb.onclick = () => { R.capAge = nextCapAge(R.capAge); try { localStorage.setItem(CAPAGE_PREF, String(R.capAge)); } catch (e) {} paintCap(); needRefresh = true; };
+  $('modes').appendChild(cb);
   markBars();
 }
 let warFocusIdx = 0;
@@ -129,6 +140,21 @@ function loop(t) { if (!loop.n) console.log('loop1'); loop.n = (loop.n || 0) + 1
     if (n) needRefresh = true;
     if (S.auto && n) for (let i = 0; i < Math.min(n, 3); i++) sim.autoGod(S, map);
   }
+  if (S && S.track) {
+    const cur = trackedWarIds(S);
+    if (autoWarPause && speed > 0) {
+      const ev = warEvents(prevTrkWars, cur);
+      if (ev.started.length || ev.ended.length) {
+        const tn = S.nations[S.track.id];
+        speed = 0; markBars();
+        const nm = tn ? tn.name : '추적 국가';
+        const what = tn && !tn.alive ? '멸망' : ev.started.length ? '전쟁 발발' : '전쟁 종료';
+        toast('★ ' + nm + ' ' + what + ' — 자동으로 멈췄습니다 (스페이스바로 재개)');
+        trackSig = ''; renderTrack();
+      }
+    }
+    prevTrkWars = cur;
+  } else prevTrkWars = [];
   for (const f of S.fxQueue.splice(0)) if (speed < 20) R.addEffect(f[0], f[1], f[1] === 'war' ? '#ff5050' : f[1] === 'plague' ? '#9be26a' : '#ffd27a');
   if (S.log.length) { const lg = S.log; let i = lg.length - 1; while (i >= 0 && lg[i] !== loop.lastLog) i--; const fresh = i < 0 ? lg.slice(-1) : lg.slice(i + 1); loop.lastLog = lg[lg.length - 1];
     if (speed <= 100 && t - (loop.tt || 0) > 2500) { const big = fresh.filter((l) => l.i >= 3).pop(); if (big) { loop.tt = t; toast(yearStr(big.y) + ' · ' + big.t); } } }
@@ -415,6 +441,7 @@ try { trackFold = localStorage.getItem('genesis-atlas-trackfold') === '1'; } cat
 function setTracking(id) {
   if (id == null || (S.track && S.track.id === id)) S.track = null; else sim.setTrack(S, id);
   R.trackId = S.track ? S.track.id : -1;
+  prevTrkWars = trackedWarIds(S);
   needRefresh = true; trackSig = ''; panelSig = ''; renderTrack(); renderPanel();
   toast(S.track ? S.nations[S.track.id].name + ' 추적 시작' : '추적 해제');
 }
@@ -428,7 +455,7 @@ function renderTrack() {
   if (T.dead && !T.mourned) { T.mourned = true; toast('추적 중이던 ' + n.name + '이(가) 역사에서 사라졌습니다'); }
   const wars = n.alive ? S.wars.filter((w) => w.A.includes(n.id) || w.D.includes(n.id)) : [];
   const news = sim.nationLog(S, n.id, 3);
-  const sig = [n.alive, Math.round(n.pop), n.pc, Math.round(n.stab * 100), wars.length, news.length ? news[0].y + news[0].t : '', T.gained, T.lost, T.dead].join('|');
+  const sig = [n.alive, Math.round(n.pop), n.pc, Math.round(n.stab * 100), wars.length, news.length ? news[0].y + news[0].t : '', T.gained, T.lost, T.dead, autoWarPause].join('|');
   if (sig === trackSig) return; trackSig = sig;
   let h = `<div class="thead"><i style="color:rgb(${n.rgb})">■</i><b>${n.name}</b><span>${n.gov}</span></div>`;
   if (trackFold) {
@@ -453,6 +480,7 @@ function renderTrack() {
   h += `<div class="tfine">${yearStr(T.since)}부터 추적 중</div>`;
   if (news.length) h += '<div class="tnews">' + news.map((l) => `<div${l.p >= 0 ? ` class="hasloc" data-tp="${l.p}" title="눌러서 위치로 이동"` : ''}>${yearStr(l.y)} · ${l.t}</div>`).join('') + '</div>';
   h += '<div class="tbtns"><button id="tFocus">지도에서 보기</button><button id="tLog">연대기</button><button id="tOff">추적 해제</button></div>';
+  if (n.alive) h += `<button id="tWarPause" class="twp${autoWarPause ? ' on' : ''}" title="켜 두면 이 국가가 전쟁을 시작하거나 전쟁이 끝날 때 자동으로 일시정지합니다">⚔ 전쟁 시작·종료 시 자동 정지: ${autoWarPause ? '켜짐' : '꺼짐'}</button>`;
   el.innerHTML = h;
   el.querySelector('.thead').onclick = () => { trackFold = true; try { localStorage.setItem('genesis-atlas-trackfold', '1'); } catch (e) {} trackSig = ''; renderTrack(); };
   el.querySelector('.thead').title = '눌러서 접기';
@@ -461,6 +489,14 @@ function renderTrack() {
   for (const d of el.querySelectorAll('[data-tp]')) d.onclick = () => goTo(+d.dataset.tp);
   $('tLog').onclick = () => { logNat = n.id; tab = 'log'; setPanelOpen(true); panelSig = ''; renderPanel(); };
   $('tOff').onclick = () => setTracking(null);
+  const twp = $('tWarPause');
+  if (twp) twp.onclick = () => {
+    autoWarPause = !autoWarPause;
+    try { localStorage.setItem(WARPAUSE_PREF, autoWarPause ? '1' : '0'); } catch (e) {}
+    prevTrkWars = trackedWarIds(S);
+    trackSig = ''; renderTrack();
+    toast(autoWarPause ? '추적 국가의 전쟁이 시작되거나 끝나면 자동으로 멈춥니다' : '전쟁 자동 정지를 껐습니다');
+  };
   const c = $('tspark').getContext('2d'); const hs = T.hist;
   if (hs.length) {
     c.strokeStyle = '#7fd0ff'; c.lineWidth = 1.5; c.beginPath();
