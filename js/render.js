@@ -406,7 +406,7 @@ const FX_STYLE = {
   quake: { c: '#241c12', dust: '#d8cdb4' }, volcano: { c: '#ff7a3c' }, meteor: { c: '#ffd27a' },
   flood: { c: '#6fb7ff' }, tribe: { c: '#b8e986' }, prophet: { c: '#ffd76a' },
   hero: { c: '#ffd24a' }, revolt: { c: '#ff6a3c' }, peace: { c: '#bfe3ff' },
-  war: { c: '#ff5050' }, warshout: { c: '#ff3b30' }, goldenage: { c: '#ffcf4d' }, migrate: { c: '#a8d8ff' },
+  war: { c: '#ff5050' }, warshout: { c: '#ff3b30' }, goldenage: { c: '#ffcf4d' }, migrate: { c: '#a8d8ff' }, warshield: { c: '#7ab8ff' }, warheal: { c: '#8ff0a4' }, mobilize: { c: '#ff9f43' },
 };
 function drawFx(ctx, e, x, y, z, time) {
   const k = e.t / 2.4, a = 1 - k;
@@ -608,6 +608,42 @@ function drawFx(ctx, e, x, y, z, time) {
         ctx.globalAlpha = a * 0.9;
         ctx.beginPath(); ctx.moveTo(x + Math.cos(ang) * r0, y + Math.sin(ang) * r0); ctx.lineTo(x + Math.cos(ang) * r1, y + Math.sin(ang) * r1); ctx.stroke();
         ctx.beginPath(); ctx.arc(x + Math.cos(ang) * r1, y + Math.sin(ang) * r1, 1.8 * u, 0, 7); ctx.fill();
+      }
+      break; }
+    case 'warshield': { // 하늘에서 내려오는 반투명 방패 돔
+      ring((6 + k * 26) * u, 2 * a + 0.4);
+      ctx.strokeStyle = st.c; ctx.lineWidth = Math.max(1.2, 2.4 * u * a + 0.4);
+      const rr = (16 + k * 10) * u;
+      ctx.globalAlpha = a * 0.9;
+      ctx.beginPath(); ctx.arc(x, y + rr * 0.35, rr, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+      ctx.globalAlpha = a * 0.5;
+      ctx.beginPath(); ctx.arc(x, y + rr * 0.35, rr * 0.7, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+      ctx.fillStyle = '#dff0ff';
+      for (let n = 0; n < 5; n++) {
+        const ang = Math.PI * (1.2 + n * 0.15), gx = x + Math.cos(ang) * rr, gy = y + rr * 0.35 + Math.sin(ang) * rr;
+        ctx.globalAlpha = a * (0.4 + 0.6 * rnd(n + 3));
+        ctx.beginPath(); ctx.arc(gx, gy, 1.4 * u, 0, 7); ctx.fill();
+      }
+      break; }
+    case 'warheal': { // 피어오르는 치유의 십자
+      ring((5 + k * 22) * u, 1.5 * a + 0.3);
+      ctx.strokeStyle = st.c; ctx.lineWidth = Math.max(1, 1.8 * u);
+      for (let n = 0; n < 6; n++) {
+        const cx = x + (rnd(n) - 0.5) * 40 * u;
+        const cy = y + 8 * u - ((k * 1.2 + rnd(n + 21)) % 1) * 46 * u;
+        const sz = (2.2 + rnd(n + 9) * 1.6) * u;
+        ctx.globalAlpha = a * 0.9;
+        ctx.beginPath(); ctx.moveTo(cx - sz, cy); ctx.lineTo(cx + sz, cy); ctx.moveTo(cx, cy - sz); ctx.lineTo(cx, cy + sz); ctx.stroke();
+      }
+      break; }
+    case 'mobilize': { // 솟아오르는 전진 셰브론
+      ring((5 + k * 24) * u, 2 * a + 0.4);
+      ctx.strokeStyle = st.c; ctx.lineWidth = Math.max(1.2, 2 * u);
+      for (let n = 0; n < 4; n++) {
+        const cy = y + 6 * u - ((k * 1.4 + n * 0.25) % 1) * 44 * u;
+        const wdt = (7 - n) * u;
+        ctx.globalAlpha = a * (0.55 + n * 0.12);
+        ctx.beginPath(); ctx.moveTo(x - wdt, cy + 3 * u); ctx.lineTo(x, cy - 3 * u); ctx.lineTo(x + wdt, cy + 3 * u); ctx.stroke();
       }
       break; }
     default: { // 기존 공통 이중 링 (전쟁 점령 등)

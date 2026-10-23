@@ -163,4 +163,58 @@ if (city >= 0) {
   const j2 = JSON.parse(sim.serialize(S));
   ok(Array.isArray(j2.buffs), 'serialize keeps buffs');
 }
+// 15. 전시 권능 3종: 수호의 방패·총동원령·전장의 치유
+{
+  const N = map.provinces.length;
+  const nid = P.owner[owned];
+  if (!S.wars.some((w) => w.A.includes(nid) || w.D.includes(nid))) sim.applyPower(S, map, 'war', owned);
+  const w = S.wars.find((x) => x.A.includes(nid) || x.D.includes(nid)) || S.wars[0];
+  ok(!!w, 'wartime test war exists');
+  if (w) {
+    const wnat = (w.A.includes(nid) || w.D.includes(nid)) ? nid : w.A[0];
+    let wprov = -1; for (let q = 0; q < N; q++) if (P.owner[q] === wnat) { wprov = q; break; }
+    const wn = S.nations[wnat];
+    let pnat = -1; for (const x of S.nations) if (x.alive && x.pc > 0 && !S.wars.some((z) => z.A.includes(x.id) || z.D.includes(x.id))) { pnat = x.id; break; }
+    let pprov = -1; if (pnat >= 0) for (let q = 0; q < N; q++) if (P.owner[q] === pnat) { pprov = q; break; }
+    if (pprov >= 0) {
+      const r0 = sim.applyPower(S, map, 'warshield', pprov);
+      ok(!r0.ok && r0.msg.includes('전쟁 중'), 'warshield refused in peace');
+      const r0b = sim.applyPower(S, map, 'mobilize', pprov);
+      ok(!r0b.ok && r0b.msg.includes('전쟁 중'), 'mobilize refused in peace');
+    }
+    const aS = sim.powerArea(S, map, 'warshield', wprov);
+    ok(aS.ok && aS.shape === 'nation', 'warshield nation area at war');
+    const q0 = S.fxQueue.length;
+    const r1 = sim.applyPower(S, map, 'warshield', wprov);
+    ok(r1.ok && (S.buffs || []).some((b) => b.kind === 'shield' && b.nat === wnat), 'warshield buff applied');
+    ok(S.fxQueue.length === q0 + 1 && S.fxQueue[S.fxQueue.length - 1][1] === 'warshield', 'warshield fx pushed');
+    ok(r1.diff.events.some((e) => e.includes('수호의 방패')), 'warshield logged');
+    sim.step(S, map);
+    ok((S.buffs || []).some((b) => b.kind === 'shield' && b.nat === wnat) === S.wars.some((x) => x.A.includes(wnat) || x.D.includes(wnat)), 'warshield persists only while at war');
+    wn.exh = 0.6;
+    const r2 = sim.applyPower(S, map, 'mobilize', wprov);
+    ok(r2.ok && wn.exh === 0, 'mobilize resets exhaustion');
+    ok((S.buffs || []).some((b) => b.kind === 'mobil' && b.nat === wnat && b.until === S.year + 10), 'mobilize buff 10y');
+    ok(r2.diff.nations.some((d) => d.id === wnat && d.stab1 > d.stab0), 'mobilize stab bump in diff');
+    let hprov = -1; for (let q = 0; q < N; q++) if (P.owner[q] === wnat && P.pop[q] > 10) { hprov = q; break; }
+    ok(hprov >= 0, 'warheal target province alive');
+    if (hprov >= 0) {
+      P.unrest[hprov] = 0.6;
+      const u0 = P.unrest[hprov], pop0 = P.pop[hprov];
+      const r3 = sim.applyPower(S, map, 'warheal', hprov);
+      ok(r3.ok, 'warheal ok');
+      ok(P.unrest[hprov] < u0 && P.pop[hprov] > pop0, 'warheal unrest down pop up');
+      ok(r3.diff.events.some((e) => e.includes('치유')), 'warheal logged');
+    }
+    if (pprov >= 0) {
+      for (let q = 0; q < N; q++) if (P.owner[q] === pnat) P.unrest[q] = 0.1;
+      const r4 = sim.applyPower(S, map, 'warheal', pprov);
+      ok(!r4.ok && r4.msg.includes('상처'), 'warheal refused when no damage');
+    }
+    for (const w2 of [...S.wars]) sim.endWar(S, map, w2, '');
+    sim.step(S, map);
+    ok(!(S.buffs || []).some((b) => b.kind === 'shield'), 'warshield ends at peace');
+    ok(S.log.some((l) => l.t.includes('수호의 방패가 내려')), 'warshield end logged');
+  }
+}
 console.log(fail ? 'FAILED ' + fail : 'ALL OK'); process.exit(fail ? 1 : 0);

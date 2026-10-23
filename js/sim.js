@@ -21,6 +21,9 @@ export const POWERS = {
   revolt: { name: '민중 봉기', desc: '지역의 불만을 폭발시켜 독립을 부추깁니다.' },
   peace: { name: '평화의 신탁', desc: '해당 국가가 치르는 모든 전쟁을 끝냅니다.' },
   war: { name: '전쟁의 불씨', desc: '이웃과의 관계를 악화시켜 전쟁을 부추깁니다.' },
+  warshield: { name: '수호의 방패', desc: '전쟁 중인 국가를 보호합니다: 전쟁이 끝날 때까지 영토 방어가 강해지고 피로가 천천히 쌓입니다.' },
+  warheal: { name: '전장의 치유', desc: '전쟁으로 상처 입은 자국 지방을 돌봅니다: 불안이 가라앉고 인구가 조금 회복됩니다.' },
+  mobilize: { name: '총동원령', desc: '전쟁 중인 국가의 피로를 즉시 씻어 내고 10년간 군사력을 끌어올립니다.' },
 };
 
 export function createState(map, opts = {}) {
@@ -187,7 +190,7 @@ export function aggregate(S, map) {
     if (!n.alive) continue; if (n.pc === 0) { killNation(S, n, '영토를 모두 잃고'); continue; }
     alive++;
     n.tech = n.pop > 0 ? n._t / n.pop : 0; n.peakPop = Math.max(n.peakPop, n.pop); n.peakPc = Math.max(n.peakPc, n.pc);
-    n.mil = n.pop * 0.016 * Math.pow(1.75, n.tech) * clamp(0.4 + n.stab, 0.2, 1.3) * (1 - 0.5 * clamp(n.exh, 0, 1));
+    n.mil = n.pop * 0.016 * Math.pow(1.75, n.tech) * clamp(0.4 + n.stab, 0.2, 1.3) * (1 - 0.5 * clamp(n.exh, 0, 1)) * (buffOf(S, n.id, 'mobil') ? 1.25 : 1);
     n.gdp = n.pop * (0.25 + 0.55 * n.tech) * 0.001 * (1 + n.trade * 0.05);
     const cx = n._lx / n._w, cy = n._ly / n._w; let best = 1e18, bx = cx, by = cy;
     for (let p = 0; p < N; p++) if (P.owner[p] === n.id) { const o = prv[p]; const d = (o.ax - cx) ** 2 + (o.ay - cy) ** 2; if (d < best) { best = d; bx = o.ax; by = o.ay; } }
@@ -245,7 +248,15 @@ export function sampleTrack(S) {
 // ---------- 한 해 진행 ----------
 export function step(S, map) {
   S.year++; if (S.mode === 'emergent' && S.year === 0) S.year = 1;
-  if (S.buffs && S.buffs.length) S.buffs = S.buffs.filter((b) => { if (b.until > S.year) return true; const n = S.nations[b.nat]; if (n && n.alive) addLog(S, `${n.name}의 전성기가 저물었습니다.`, 1); return false; });
+  if (S.buffs && S.buffs.length) S.buffs = S.buffs.filter((b) => {
+    const k = b.kind || 'golden'; const n = S.nations[b.nat];
+    if (k === 'shield') {
+      if (n && n.alive && S.wars.some((w) => w.A.includes(b.nat) || w.D.includes(b.nat))) return true;
+      if (n && n.alive) addLog(S, `${n.name}의 수호의 방패가 내려졌습니다.`, 1); return false;
+    }
+    if (b.until > S.year) return true;
+    if (n && n.alive) addLog(S, k === 'mobil' ? `${n.name}의 총동원령이 해제되었습니다.` : `${n.name}의 전성기가 저물었습니다.`, 1); return false;
+  });
   stepProvinces(S, map);
   if (S.year % 2 === 0 || !S.fr) computeFronts(S, map);
   aggregate(S, map);
@@ -260,7 +271,8 @@ export function step(S, map) {
 }
 
 const LV_YEARS = [5000, 3000, 1500, 1100, 800, 350, 150, 100, 150, 400, 400];
-function goldenUntil(S, nat) { if (!S.buffs) return 0; for (const b of S.buffs) if (b.nat === nat && b.until > S.year) return b.until; return 0; }
+function buffOf(S, nat, kind) { if (!S.buffs) return null; for (const b of S.buffs) if (b.nat === nat && (b.kind || 'golden') === kind && (b.until == null || b.until > S.year)) return b; return null; }
+function goldenUntil(S, nat) { const b = buffOf(S, nat, 'golden'); return b ? b.until : 0; }
 function techCurve(t) { const i = Math.min(9, Math.floor(t)); const f = t - i; const d = LV_YEARS[i] * (1 - f) + LV_YEARS[i + 1] * f; return t >= 9.6 ? 0 : 0.445 / d; }
 function stepProvinces(S, map) {
   const rng = S.rng, P = S.P, N = map.provinces.length; const prv = map.provinces;
@@ -425,14 +437,14 @@ function stepWars(S, map) {
       const tries = 1 + Math.floor(Math.sqrt(pairs.length) / 2);
       for (let i = 0; i < tries; i++) {
         const [p, q, ty] = pairs[rng.int(pairs.length)]; if (P.owner[p] === P.owner[q] || P.owner[p] < 0 || P.owner[q] < 0) continue;
-        const defn = 1 + 0.45 * prv[q].e + P.city[q] * 0.1 + (ty ? 0.5 : 0);
+        const defn = (1 + 0.45 * prv[q].e + P.city[q] * 0.1 + (ty ? 0.5 : 0)) * (buffOf(S, P.owner[q], 'shield') ? 1.5 : 1);
         const pc = 0.42 / (1 + Math.exp(-(sAtk / (sDef * defn + 1) - 1) * 2.4));
         if (rng.next() < pc) captureProvince(S, map, q, P.owner[q], P.owner[p], w, p);
       }
     };
     attempt(A, D, sA, sD); attempt(D, A, sD, sA);
     w.exA += 0.010 + 0.03 * sD / tot; w.exD += 0.010 + 0.03 * sA / tot;
-    for (const n of A) n.exh = Math.max(n.exh, w.exA); for (const n of D) n.exh = Math.max(n.exh, w.exD);
+    for (const n of A) n.exh = Math.max(n.exh, w.exA * (buffOf(S, n.id, 'shield') ? 0.5 : 1)); for (const n of D) n.exh = Math.max(n.exh, w.exD * (buffOf(S, n.id, 'shield') ? 0.5 : 1));
     for (const [k, list] of S.fr) { const x = (k / 4096) | 0, y = k % 4096; if (w.A.includes(x) && w.D.includes(y)) for (const e of list) { const d1 = P.pop[e[0]] * 0.004, d2 = P.pop[e[1]] * 0.004; P.pop[e[0]] -= d1; P.pop[e[1]] -= d2; S.deaths.war += d1 + d2; } }
     const dur = S.year - w.start;
     const dcap = D.every((n) => P.owner[n.cap] !== n.id) && dur > 1, acap = A.every((n) => P.owner[n.cap] !== n.id) && dur > 1;
@@ -595,6 +607,24 @@ export function powerArea(S, map, type, p) {
       if (!nb.length) return { ok: false, msg: '이웃 국가가 없습니다', provs: nationProvs(ow), nation: ow };
       return { ok: true, provs: nationProvs(ow), nation: ow, shape: 'nation', expect: n.name + '이(가) 이웃 ' + nb.length + '개국 중 하나와 전쟁을 시작합니다' };
     }
+    case 'warshield': {
+      if (ow < 0) return noNation;
+      const ws = S.wars.filter((w) => w.A.includes(ow) || w.D.includes(ow));
+      if (!ws.length) return { ok: false, msg: '전쟁 중인 국가에만 쓸 수 있습니다', provs: nationProvs(ow), nation: ow };
+      return { ok: true, provs: nationProvs(ow), nation: ow, shape: 'nation', expect: S.nations[ow].name + ' 전체: ' + (buffOf(S, ow, 'shield') ? '방패가 이미 내려와 있습니다' : '전쟁 종료까지 방어 +50% · 피로 누적 절반') };
+    }
+    case 'warheal': {
+      if (ow < 0) return noNation;
+      const hurt = []; for (let q = 0; q < P.owner.length; q++) if (P.owner[q] === ow && P.unrest[q] >= 0.3) hurt.push(q);
+      if (!hurt.length) return { ok: false, msg: '전쟁으로 상처 입은 지방이 없습니다', provs: nationProvs(ow), nation: ow };
+      return { ok: true, provs: hurt, nation: ow, shape: 'wide', expect: '전쟁 상처 ' + hurt.length + '곳: 불안 대폭 감소 · 인구 조금 회복' };
+    }
+    case 'mobilize': {
+      if (ow < 0) return noNation;
+      const ws = S.wars.filter((w) => w.A.includes(ow) || w.D.includes(ow));
+      if (!ws.length) return { ok: false, msg: '전쟁 중인 국가에만 쓸 수 있습니다', provs: nationProvs(ow), nation: ow };
+      return { ok: true, provs: nationProvs(ow), nation: ow, shape: 'nation', expect: S.nations[ow].name + ' 전체: ' + (buffOf(S, ow, 'mobil') ? '총동원령이 10년으로 새로 이어집니다' : '피로 즉시 회복 · 10년간 군사력 +25%') };
+    }
   }
   return { ok: false, msg: '알 수 없는 권능', provs: [p] };
 }
@@ -645,11 +675,35 @@ export function applyPower(S, map, type, p) {
       addLog(S, `${nm}의 주민들이 바람을 따라 새 땅으로 이주했습니다.` + (settled ? ` ${settled}곳에 새 정착지가 생겼습니다.` : ''), 2, p, ow); break; }
     case 'prophet': { if (P.pop[p] < 10) { ok = false; msg = '사람이 없는 곳입니다'; break; } const rl = newReligion(S, S.rng, P.cult[p], p, S.year); P.rel[p] = rl; for (const q of map.provinces[p].land) if (P.pop[q] > 5) P.rel[q] = rl; addLog(S, `예언자가 나타나 ${nm}에 '${S.religions[rl].name}'을(를) 전했습니다.`, 2, p, ow); break; }
     case 'hero': { if (needNation()) break; const n = S.nations[ow]; n.stab = Math.min(1, n.stab + 0.3); n.lead.sci *= 1.25; for (let q = 0; q < P.owner.length; q++) if (P.owner[q] === ow) { P.unrest[q] *= 0.5; P.tech[q] += 0.05; } addLog(S, `신의 뜻으로 ${n.name}에 영웅이 강림했습니다.`, 2, p, ow); break; }
+    case 'warshield': {
+      if (needNation()) break;
+      const n = S.nations[ow];
+      if (!S.wars.some((w) => w.A.includes(ow) || w.D.includes(ow))) { ok = false; msg = '전쟁 중인 국가에만 쓸 수 있습니다'; break; }
+      S.buffs = (S.buffs || []).filter((b) => !(b.nat === ow && b.kind === 'shield'));
+      S.buffs.push({ kind: 'shield', nat: ow });
+      addLog(S, `${n.name}에 수호의 방패가 내려왔습니다. 전쟁이 끝날 때까지 영토가 굳게 지켜집니다.`, 2, p, ow); break; }
+    case 'warheal': {
+      if (needNation()) break;
+      const n = S.nations[ow]; const hurt = [];
+      for (let q = 0; q < P.owner.length; q++) if (P.owner[q] === ow && P.unrest[q] >= 0.3) hurt.push(q);
+      if (!hurt.length) { ok = false; msg = '전쟁으로 상처 입은 지방이 없습니다'; break; }
+      for (const q of hurt) { P.unrest[q] *= 0.35; P.pop[q] *= 1.06; }
+      n.stab = Math.min(1, n.stab + 0.03);
+      addLog(S, `${n.name}의 전장에 치유의 손길이 닿았습니다. 상처 입은 ${hurt.length}곳이 숨을 돌립니다.`, 2, p, ow); break; }
+    case 'mobilize': {
+      if (needNation()) break;
+      const n = S.nations[ow];
+      if (!S.wars.some((w) => w.A.includes(ow) || w.D.includes(ow))) { ok = false; msg = '전쟁 중인 국가에만 쓸 수 있습니다'; break; }
+      n.exh = 0;
+      S.buffs = (S.buffs || []).filter((b) => !(b.nat === ow && b.kind === 'mobil'));
+      S.buffs.push({ kind: 'mobil', nat: ow, until: S.year + 10 });
+      n.stab = Math.min(1, n.stab + 0.05);
+      addLog(S, `${n.name}이(가) 총동원령을 발동했습니다. 10년간 군사력이 강화됩니다.`, 2, p, ow); break; }
     case 'goldenage': {
       if (needNation()) break;
       const n = S.nations[ow];
-      S.buffs = (S.buffs || []).filter((b) => b.nat !== ow);
-      S.buffs.push({ nat: ow, until: S.year + 50 });
+      S.buffs = (S.buffs || []).filter((b) => !(b.nat === ow && (b.kind || 'golden') === 'golden'));
+      S.buffs.push({ kind: 'golden', nat: ow, until: S.year + 50 });
       n.stab = Math.min(1, n.stab + 0.05);
       addLog(S, `${n.name}에 전성기가 찾아왔습니다. 앞으로 50년간 학문과 문화가 꽃핍니다.`, 2, p, ow); break; }
     case 'revolt': { if (needNation()) break; const n = S.nations[ow]; if (n.pc < 2 || n.cap === p) { ok = false; msg = '수도나 단일 지방 국가에는 쓸 수 없습니다'; break; } revolt(S, map, p, n); break; }
