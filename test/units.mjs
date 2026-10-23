@@ -109,4 +109,6 @@ let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log('FAIL', m); }
 }
 // 공성 장비 (R3)
 { const src = (await import('fs')).readFileSync('./js/units.js', 'utf8'); ok(src.includes('const engine =') && src.includes('농성군의 출격'), '공성 장비·출격 로직 존재'); }
+// 합류 (R4)
+{ const src = (await import('fs')).readFileSync('./js/units.js', 'utf8'); ok(src.includes('2.5) 합류'), '합류 로직 존재'); }
 console.log(fail ? 'FAILED ' + fail : 'ALL OK'); process.exit(fail ? 1 : 0);

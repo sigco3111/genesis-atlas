@@ -270,6 +270,20 @@ export function stepArmies(S, map) {
       if (a.men > 0.7 * Math.min(4500, Math.max(150, Math.round(n.pop * 0.004))) && rng.next() < 0.3) { a.tgt = -1; a.st = 'march'; }
     }
   }
+  // 2.5) 합류: 같은 나라·같은 전쟁의 부대가 행군/주둔 중 가까워지면 하나의 대군으로 합쳐진다
+  for (let i = 0; i < S.armies.length; i++) {
+    const A = S.armies[i]; if (A.men <= 0 || (A.st !== 'march' && A.st !== 'garrison')) continue;
+    for (let j = i + 1; j < S.armies.length; j++) {
+      const B = S.armies[j]; if (B.men <= 0 || B.nat !== A.nat || B.war !== A.war || (B.st !== 'march' && B.st !== 'garrison')) continue;
+      if ((A.x - B.x) ** 2 + (A.y - B.y) ** 2 > 12 * 12 || A.men + B.men > 7000) continue;
+      const tot = A.men + B.men, wa = A.men / tot, wb = B.men / tot;
+      A.xp = clamp(xpOf(A) * wa + xpOf(B) * wb + 0.04, 0, 1); A.mor = clamp(moraleOf(A) * wa + moraleOf(B) * wb + 0.05, 0, 1);
+      if (xpOf(B) > xpOf(A) && B.cmd) A.cmd = B.cmd; // 더 노련한 쪽의 지휘관이 대군을 이끈다
+      A.men = tot; A.men0 = A.men0 + B.men0; B.men = 0;
+      const nn = S.nations[A.nat];
+      if (nn && tot > 3500) addLog(S, `${nn.name}의 부대들이 합류해 병력 ${(tot / 1000).toFixed(1)}천 명의 대군이 되었습니다.`, 1, provAt(map, A.x, A.y), A.nat, -1);
+    }
+  }
   // 3) 회전: 전쟁 중인 나라의 부대끼리 가까우면 교전
   for (let i = 0; i < S.armies.length; i++) {
     const A = S.armies[i]; if (A.men <= 0 || A.st === 'retreat') continue;
