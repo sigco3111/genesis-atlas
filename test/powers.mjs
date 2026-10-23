@@ -212,7 +212,9 @@ if (city >= 0) {
       ok(r3.ok, 'warheal ok with capture record');
       ok(P.unrest[hprov] < u0 && P.pop[hprov] > pop0, 'warheal unrest down pop up');
       ok(r3.diff.events.some((e) => e.includes('치유')), 'warheal logged');
-      ok(!S.recentCaps.some((c) => c.q === hprov), 'warheal consumes the damage record');
+      const rec = S.recentCaps.find((c) => c.q === hprov);
+      ok(!!rec && rec.healed === 1, 'warheal flags the damage record as healed');
+      ok(S.recentCaps.some((c) => c.q === hprov), 'warheal preserves the capture record for map/war display');
       // 같은 피해로 반복 회복 불가
       P.unrest[hprov] = 0.6;
       const r3b = sim.applyPower(S, map, 'warheal', hprov);

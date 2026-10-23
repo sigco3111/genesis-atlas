@@ -555,7 +555,7 @@ function warWounds(S, ow) {
   const P = S.P, out = [];
   if (!S.recentCaps || !S.recentCaps.length) return out;
   const cut = S.year - 40; const hit = new Set();
-  for (const c of S.recentCaps) if (c.y >= cut) hit.add(c.q);
+  for (const c of S.recentCaps) if (c.y >= cut && !c.healed) hit.add(c.q);
   for (const q of hit) if (P.owner[q] === ow && P.unrest[q] >= 0.15) out.push(q);
   return out;
 }
@@ -697,7 +697,7 @@ export function applyPower(S, map, type, p) {
       const hurtSet = new Set(hurt);
       for (const q of hurt) { P.unrest[q] *= 0.35; P.pop[q] *= 1.06; }
       n.stab = Math.min(1, n.stab + 0.03);
-      S.recentCaps = S.recentCaps.filter((c) => !hurtSet.has(c.q)); // 치유는 기록된 전쟁 피해를 소모한다 — 같은 피해로 반복 회복 불가
+      for (const c of S.recentCaps) if (hurtSet.has(c.q)) c.healed = 1; // 치유는 기록된 전쟁 피해를 소모한다(기록은 지도 표시·전쟁 기록용으로 보존, healed 표시만) — 같은 피해로 반복 회복 불가
       addLog(S, `${n.name}의 전장에 치유의 손길이 닿았습니다. 상처 입은 ${hurt.length}곳이 숨을 돌립니다.`, 2, p, ow); break; }
     case 'mobilize': {
       if (needNation()) break;
