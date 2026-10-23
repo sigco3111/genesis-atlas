@@ -338,32 +338,6 @@ export class Renderer {
         drawShip(ctx, px, py, ang, ss * 1.25, col, '#fff6e0');
       }
     }
-    // 자율 부대: 깃발 칩 + 병력 수. 고속 진행에서는 숨긴다 (main.js가 showArmies로 제어)
-    if (S.armies && S.armies.length && this.showArmies !== false) {
-      // 모바일처럼 줌이 낮아도 읽히도록 최소 크기를 키우고, 같은 지점에 겹친 부대는 원형으로 벌린다
-      const ss = Math.max(7.5, Math.min(12, 3.4 * Math.sqrt(z)));
-      const groups = new Map();
-      for (const a of S.armies) { const k = Math.round(a.x / 1.2) + ':' + Math.round(a.y / 1.2); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(a); }
-      for (const arr of groups.values()) {
-        for (let gi = 0; gi < arr.length; gi++) {
-          const a = arr[gi]; const nn = S.nations[a.nat]; if (!nn) continue;
-          let ox = 0, oy = 0;
-          if (arr.length > 1) { const ang = (gi / arr.length) * Math.PI * 2 - Math.PI / 2; const rr = ss * 1.1; ox = Math.cos(ang) * rr; oy = Math.sin(ang) * rr; }
-          const [bx, by] = this.w2s(a.x, a.y);
-          const px = bx + ox, py = by + oy;
-          if (px < -30 || py < -30 || px > this.cssW + 30 || py > this.cssH + 30) continue;
-          const col = `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})`;
-          drawArmy(ctx, px, py, ss, col, this.time + a.id * 0.9, a.st, Math.min(9, Math.max(0, Math.floor(nn.tech || 0))));
-          if (z >= 1.1) {
-            const fs = Math.max(9.5, ss);
-            ctx.font = '700 ' + fs + 'px system-ui,sans-serif'; ctx.textAlign = 'center';
-            ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(5,15,28,.9)';
-            const tx = a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : String(Math.round(a.men));
-            ctx.strokeText(tx, px, py + ss * 2.0 + fs * 0.35); ctx.fillStyle = '#fff'; ctx.fillText(tx, px, py + ss * 2.0 + fs * 0.35);
-          }
-        }
-      }
-    }
     // 전쟁 시각화: 최근 점령(진격 화살표·점령 링) + 교전 지역 마커
     const keep = this.capAge == null ? 3 : this.capAge;
     const caps = visibleCaps(S.recentCaps, S.year, keep);
@@ -480,6 +454,32 @@ export class Renderer {
       ctx.font = `600 ${q.size}px "Noto Sans KR", system-ui, sans-serif`;
       ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.fillStyle = q.gold ? '#ffe9a8' : '#fff';
       ctx.strokeText(q.t, q.x, q.y); ctx.fillText(q.t, q.x, q.y);
+    }
+    // 자율 부대: 깃발 칩 + 병력 수. 고속 진행에서는 숨긴다 (main.js가 showArmies로 제어)
+    if (S.armies && S.armies.length && this.showArmies !== false) {
+      // 모바일처럼 줌이 낮아도 읽히도록 최소 크기를 키우고, 같은 지점에 겹친 부대는 원형으로 벌린다
+      const ss = Math.max(7.5, Math.min(12, 3.4 * Math.sqrt(z)));
+      const groups = new Map();
+      for (const a of S.armies) { const k = Math.round(a.x / 1.2) + ':' + Math.round(a.y / 1.2); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(a); }
+      for (const arr of groups.values()) {
+        for (let gi = 0; gi < arr.length; gi++) {
+          const a = arr[gi]; const nn = S.nations[a.nat]; if (!nn) continue;
+          let ox = 0, oy = 0;
+          if (arr.length > 1) { const ang = (gi / arr.length) * Math.PI * 2 - Math.PI / 2; const rr = ss * 1.1; ox = Math.cos(ang) * rr; oy = Math.sin(ang) * rr; }
+          const [bx, by] = this.w2s(a.x, a.y);
+          const px = bx + ox, py = by + oy;
+          if (px < -30 || py < -30 || px > this.cssW + 30 || py > this.cssH + 30) continue;
+          const col = `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})`;
+          drawArmy(ctx, px, py, ss, col, this.time + a.id * 0.9, a.st, Math.min(9, Math.max(0, Math.floor(nn.tech || 0))));
+          if (z >= 1.1) {
+            const fs = Math.max(9.5, ss);
+            ctx.font = '700 ' + fs + 'px system-ui,sans-serif'; ctx.textAlign = 'center';
+            ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(5,15,28,.9)';
+            const tx = a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : String(Math.round(a.men));
+            ctx.strokeText(tx, px, py + ss * 2.0 + fs * 0.35); ctx.fillStyle = '#fff'; ctx.fillText(tx, px, py + ss * 2.0 + fs * 0.35);
+          }
+        }
+      }
     }
     // 국가 라벨: 줌 단계별 개수 제한 + 충돌 회피, 추적 국가는 항상 우선 배치·금색 강조
     if (this.showLabels !== false) {
