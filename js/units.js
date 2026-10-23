@@ -156,7 +156,10 @@ export function battleTick(S, map, A, B) {
   }
   if (S.year % 2 === 0) { const p = provA >= 0 ? provA : provB; if (p >= 0) S.fxQueue.push([p, 'war']); }
   for (const [U, sU, sF] of [[A, sA, sB], [B, sB, sA]]) {
-    if (U.men < MIN_MEN) U.men = 0;
+    if (U.men < MIN_MEN) {
+      U.men = 0;
+      if (U.cmd && xpOf(U) >= 0.25 && !U.fallen) { U.fallen = 1; const un = S.nations[U.nat]; if (un) addLog(S, `${un.name}의 ${CMD_TRAITS[U.cmd.t].key} ${U.cmd.n}이(가) 전사하고 부대가 괴멸했습니다.`, 2, provAt(map, U.x, U.y), U.nat, (U === A ? B : A).nat); }
+    }
     else if ((U.men < U.men0 * RETREAT_FRAC || moraleOf(U) < 0.18) && U.st !== 'retreat') {
       const foe = U === A ? B : A; const fn = S.nations[foe.nat], un = S.nations[U.nat];
       if (un && fn && U.men0 + foe.men0 > 1500) addLog(S, `${fn.name}의 ${unitOf(fn).key}이(가) ${un.name}의 ${unitOf(un).key}을(를) 물리쳤습니다.`, 2, provAt(map, U.x, U.y), fn.id, un.id);
