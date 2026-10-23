@@ -1,6 +1,7 @@
 // 문명 시뮬레이션 코어 (지방 단위 집계 모델). DOM/Canvas에 의존하지 않는다.
 import { RNG } from './rng.js';
 import { makeLang, genName, genReligion, genCultureName, hslToRgb, ERA_NAMES, yearStr, numStr } from './names.js';
+import { snapWar, recordCap, buildSummary, pushSummary } from './warhist.js';
 
 export const VERSION = 1;
 const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
@@ -29,7 +30,7 @@ export function createState(map, opts = {}) {
     P: { pop: new Float32Array(N), tech: new Float32Array(N), owner: new Int16Array(N).fill(-1), cult: new Int16Array(N).fill(-1), rel: new Int16Array(N).fill(-1), unrest: new Float32Array(N), city: new Uint8Array(N), fx: new Float32Array(N).fill(1), km: new Float32Array(N).fill(1), plague: new Uint8Array(N) },
     nations: [], cultures: [], religions: [], wars: [], truce: {}, log: [], hist: [], routes: [], cityName: new Array(N).fill(''), provName: new Array(N).fill(''),
     auto: !!opts.auto, aggr: opts.aggr ?? 1, worldFirst: {}, stats: {}, fr: null, nextWar: 1, track: null,
-    recentCaps: [],
+    recentCaps: [], warHist: [],
     eventsOn: opts.events !== false, deaths: { war: 0, plague: 0, famine: 0 }, fxQueue: [],
   };
   if (S.mode === 'real') initReal(S, map, opts); else initEmergent(S, map, opts);
@@ -400,6 +401,7 @@ export function startWar(S, map, a, d, reason) {
     const side = a.allies.includes(x.id) ? 'A' : d.allies.includes(x.id) ? 'D' : ''; if (!side) continue;
     if (S.rng.chance(0.55) && !S.wars.some((z) => z.A.includes(x.id) || z.D.includes(x.id))) (side === 'A' ? w.A : w.D).push(x.id);
   }
+  w.A0 = [...w.A]; w.D0 = [...w.D]; w.snap = snapWar(S, w); w.caps = [];
   S.wars.push(w);
   a.relat[d.id] = Math.min(-40, a.relat[d.id] || 0); d.relat[a.id] = Math.min(-60, d.relat[a.id] || 0);
   const al = (ids) => ids.length > 1 ? `(+동맹 ${ids.length - 1}개국)` : '';
@@ -409,7 +411,7 @@ function stepWars(S, map) {
   const rng = S.rng, P = S.P, prv = map.provinces;
   for (const w of [...S.wars]) {
     const A = w.A.map((i) => S.nations[i]).filter((n) => n.alive), D = w.D.map((i) => S.nations[i]).filter((n) => n.alive);
-    if (!A.length || !D.length) { S.wars = S.wars.filter((z) => z !== w); continue; }
+    if (!A.length || !D.length) { if (A.length || D.length) endWar(S, map, w, A.length ? 'A' : 'D'); else S.wars = S.wars.filter((z) => z !== w); continue; } // 한쪽 멸망으로 끝난 전쟁도 결과 요약에 남김
     const sA = A.reduce((s, n) => s + n.mil, 0) * (1 - 0.4 * w.exA), sD = D.reduce((s, n) => s + n.mil, 0) * 1.1 * (1 - 0.4 * w.exD); const tot = sA + sD + 1;
     const attempt = (atk, def, sAtk, sDef) => {
       const pairs = []; for (const a of atk) for (const d of def) { const l = S.fr.get(a.id * 4096 + d.id); if (l) for (const e of l) pairs.push(e); }
@@ -441,15 +443,19 @@ function captureProvince(S, map, q, from, to, w, src) {
   S.fxQueue.push([q, 'war']);
   S.recentCaps.push({ p: src == null ? q : src, q, t: to, y: S.year, big: wasCap || P.city[q] >= 2 ? 1 : 0 });
   if (S.recentCaps.length > 90) S.recentCaps.splice(0, S.recentCaps.length - 90);
+  recordCap(w, { q, f: from, t: to, y: S.year, big: wasCap || P.city[q] >= 2 ? 1 : 0 });
 }
 export function endWar(S, map, w, winner) {
   S.wars = S.wars.filter((z) => z !== w);
-  const A = w.A.map((i) => S.nations[i]), D = w.D.map((i) => S.nations[i]);
   for (const a of w.A) for (const d of w.D) { S.truce[tkey(a, d)] = S.year + 12 + S.rng.int(18); S.nations[a].relat[d] = Math.min(S.nations[a].relat[d] || 0, -20); S.nations[d].relat[a] = Math.min(S.nations[d].relat[a] || 0, -20); }
-  const dur = S.year - w.start; const wn = winner === 'A' ? A[0] : winner === 'D' ? D[0] : null;
-  if (winner === 'A') { A[0].wins++; D[0].losses++; } else if (winner === 'D') { D[0].wins++; A[0].losses++; }
-  if (wn) { const loser = winner === 'A' ? D[0] : A[0]; loser.stab = Math.max(0.05, loser.stab - 0.15); }
-  addLog(S, `${A[0].name}와(과) ${D[0].name}의 전쟁이 ${dur}년 만에 끝났습니다.${wn ? ` 승자: ${wn.name}.` : ' 승패 없이 휴전.'}`, A[0].pc + D[0].pc > 8 ? 3 : 2, A[0].cap, A[0].id, D[0].id);
+  const sum = buildSummary(S, w, winner); pushSummary(S, sum);
+  const aId = sum.A[0], dId = sum.D[0];
+  const aN = S.nations[aId], dN = S.nations[dId];
+  const wn = winner === 'A' ? aN : winner === 'D' ? dN : null;
+  if (winner === 'A') { if (aN) aN.wins++; if (dN) dN.losses++; } else if (winner === 'D') { if (dN) dN.wins++; if (aN) aN.losses++; }
+  if (wn) { const loser = winner === 'A' ? dN : aN; if (loser) loser.stab = Math.max(0.05, loser.stab - 0.15); }
+  const pcSum = ((sum.now[aId] || [0, 0])[1]) + ((sum.now[dId] || [0, 0])[1]);
+  addLog(S, `${sum.nm[aId] || '한 나라'}와(과) ${sum.nm[dId] || '한 나라'}의 전쟁이 ${sum.dur}년 만에 끝났습니다.${wn ? ` 승자: ${wn.name}.` : ' 승패 없이 휴전.'}`, pcSum > 8 ? 3 : 2, aN ? aN.cap : -1, aId, dId);
 }
 
 function stepDiplomacy(S, map) {
@@ -637,7 +643,8 @@ export function restore(json) {
   const S = typeof json === 'string' ? JSON.parse(json) : json;
   if (!S.P.km) S.P.km = new Array(S.P.pop.length).fill(1);
   for (const k of Object.keys(TYPED)) S.P[k] = TYPED[k].from(S.P[k]);
-  const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1; S.recentCaps = S.recentCaps || [];
+  const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1; S.recentCaps = S.recentCaps || []; S.warHist = S.warHist || [];
+  for (const w of S.wars) { w.caps = w.caps || []; w.A0 = w.A0 || [...w.A]; w.D0 = w.D0 || [...w.D]; }
   for (const n of S.nations) if (!n.hist || !n.hist.length) n.hist = [[S.year, Math.round(n.pop || 0), n.pc || 0, n.stab == null ? 0.5 : Math.round(n.stab * 1000) / 1000]];
   return S;
 }

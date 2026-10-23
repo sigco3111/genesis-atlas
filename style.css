@@ -121,3 +121,23 @@ select,input{background:#12304d;border:1px solid #35597f;border-radius:8px;paddi
 canvas#cmpSpark{width:100%;height:96px;background:#0b2036;border-radius:6px}
 .cmpchips .chip.on{background:#3b7bc4;border-color:#8cc0ff;color:#fff}
 .cmprow b.up{color:#8fe08f}.cmprow b.down{color:#ff9a8a}
+/* v33 전쟁 결과 요약 */
+.warcard{background:#0b2036;border:1px solid #1d3652;border-radius:10px;padding:8px 10px;margin:6px 0}
+.warcard .whead{color:#fff;font-size:13px}
+.warcard .whead b{color:#ffd27a}
+.warcard .whead i{margin-right:2px}
+.warcard .wmeta{font-size:12px;color:#9bb3cc;margin:2px 0 4px}
+.warcard .wline{font-size:12px;color:#cfe3ff;padding:1px 0 3px}
+.warcard .wrow{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid #1d3652;padding:3px 0;font-size:12px;align-items:baseline}
+.warcard .wrow span{color:#9bb3cc;flex-shrink:0}
+.warcard .wrow b{text-align:right;font-weight:500;word-break:keep-all}
+.warcard .wrow em{font-style:normal}
+.warcard .up{color:#8fe08f}.warcard .down{color:#ff9a8a}
+.warcard .wbig{margin-top:4px;border-top:1px dashed #1d3652;padding-top:3px}
+.warcard .wbig div{padding:2px 0;font-size:12px;color:#9bb3cc}
+.warcard .wbig div.hasloc{cursor:pointer}
+.warcard .wbig div.hasloc:hover{color:#e8eef5}
+.warcard .wbig div.hasloc::after{content:' 📍';font-size:9px;opacity:.75}
+.warcard .wbtns{margin-top:5px}
+.warcard .chip{background:#0e2033;border:1px solid #2a4a6a;color:#cfe3ff;border-radius:12px;padding:3px 9px;font-size:12px}
+.warcard .chip:hover{background:#1a3550}

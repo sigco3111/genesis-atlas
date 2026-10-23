@@ -2,6 +2,7 @@ import { generateMap, MAP_KINDS, buildEarth, W, H } from './world.js';
 import { Renderer } from './render.js';
 import * as sim from './sim.js';
 import { CAP_AGE_STEPS, nextCapAge, capAgeLabel, trackedWarIds, warEvents } from './warwatch.js';
+import { capsBySide } from './warhist.js';
 import { METRICS, seriesOf, chartMax, commonWindow, changeOf, changeDir, fmtChange } from './cmptrend.js';
 import { yearStr, numStr, ERA_NAMES } from './names.js';
 const $ = (id) => document.getElementById(id);
@@ -274,7 +275,7 @@ function select(p) {
 }
 
 // ---------- 패널 ----------
-const TABS = [['world', '세계'], ['sel', '선택'], ['cmp', '비교'], ['log', '연대기'], ['god', '권능'], ['set', '설정']];
+const TABS = [['world', '세계'], ['sel', '선택'], ['cmp', '비교'], ['log', '연대기'], ['war', '전쟁'], ['god', '권능'], ['set', '설정']];
 let panelSig = '';
 let logNat = null; // 연대기 탭 국가 필터 (null = 전체)
 let cmpA = -1, cmpB = -1; // 비교 탭의 두 나라 슬롯
@@ -415,6 +416,47 @@ function renderPanel(auto) {
       h += `<div class="logsum">${nn.name}의 사건 ${entries.length}개 · 최신순${S.log.length >= 880 ? ' · 오래된 기록은 서서히 덮어씌워집니다' : ''}</div>`;
     } else { logNat = null; entries = S.log.slice(-80).reverse(); }
     h += '<div class="log">' + entries.map((l) => `<div class="i${l.i}${l.p >= 0 ? ' hasloc' : ''}"${l.p >= 0 ? ` data-lp="${l.p}" title="눌러서 위치로 이동"` : ''}>${yearStr(l.y)} · ${l.t}</div>`).join('') + '</div>';
+  } else if (tab === 'war') {
+    h = '<h3>진행 중인 전쟁</h3>';
+    if (!S.wars.length) h += '<p class="fine">지금은 전쟁이 없습니다.</p>';
+    for (const w of S.wars) {
+      const side = (ids) => ids.map((i) => S.nations[i]).filter((n) => n && n.alive);
+      const As = side(w.A), Ds = side(w.D);
+      const [ca, cd] = capsBySide(w);
+      const aN = As[0] ? As[0].name : '?', dN = Ds[0] ? Ds[0].name : '?';
+      h += '<div class="warcard"><div class="whead">⚔ <b>' + aN + '</b>' + (As.length > 1 ? ` 외 ${As.length - 1}개국` : '') + ' 대 <b>' + dN + '</b>' + (Ds.length > 1 ? ` 외 ${Ds.length - 1}개국` : '') + '</div>';
+      h += `<div class="wmeta">${yearStr(w.start)} 시작 · ${S.year - w.start}년째 · 점령 ${ca + cd ? `${aN}측 ${ca} · ${dN}측 ${cd} 지방` : '아직 없음'}</div>`;
+      h += `<div class="wbtns"><button class="chip" data-warfront="${w.id}">전선으로 이동</button></div></div>`;
+    }
+    h += '<h3>끝난 전쟁 결과</h3>';
+    const wh = (S.warHist || []).slice().reverse();
+    if (!wh.length) h += '<p class="fine">아직 끝난 전쟁이 없습니다. 전쟁이 끝나면 승패·기간·점령 지역과 양국의 변화를 여기에 정리합니다.</p>';
+    else {
+      h += '<p class="fine">인구·영토 변화는 개전~종전 사이의 전체 증감으로, 전쟁으로 인한 손실만은 아닙니다.</p>';
+      for (const s of wh) {
+        const aId = s.A[0], dId = s.D[0];
+        const aN = s.nm[aId] || '?', dN = s.nm[dId] || '?';
+        const aRgb = s.rgb[aId] || [140, 150, 160], dRgb = s.rgb[dId] || [140, 150, 160];
+        h += '<div class="warcard">';
+        h += `<div class="whead"><i style="color:rgb(${aRgb})">■</i> <b>${aN}</b>${s.A.length > 1 ? ` 외 ${s.A.length - 1}개국` : ''} 대 <i style="color:rgb(${dRgb})">■</i> <b>${dN}</b>${s.D.length > 1 ? ` 외 ${s.D.length - 1}개국` : ''}</div>`;
+        h += `<div class="wmeta">${yearStr(s.y0)}~${yearStr(s.y1)} · ${s.dur}년 · ${s.win ? '승자: ' + (s.nm[s.win === 'A' ? aId : dId] || '?') : '승패 없이 휴전'}</div>`;
+        h += `<div class="wline">${s.capsN ? `점령: ${aN}측 ${s.capsA}지방 · ${dN}측 ${s.capsD}지방` : '점령된 지방 없이 끝남'}</div>`;
+        const sideRow = (id) => {
+          const nm2 = s.nm[id] || '?';
+          const b = s.snap && s.snap[id], a = s.now[id];
+          if (!b || !a) return `<div class="wrow"><span>${nm2}</span><b>개전 기록 없음</b></div>`;
+          const dead = a[1] === 0 && b[1] > 0 ? ' (멸망)' : '';
+          const td = a[1] - b[1], pd = a[0] - b[0];
+          const pct = b[0] > 0 ? pd / b[0] * 100 : null;
+          const cls = (v) => v > 0 ? 'up' : v < 0 ? 'down' : '';
+          const sign = (v) => (v > 0 ? '+' : '') + v;
+          return `<div class="wrow"><span>${nm2}${dead}</span><b>영토 ${b[1]}→${a[1]} (<em class="${cls(td)}">${sign(td)}</em>) · 인구 ${numStr(b[0])}→${numStr(a[0])} (<em class="${cls(pd)}">${pct == null ? '—' : sign(Math.round(pct * 10) / 10) + '%'}</em>)</b></div>`;
+        };
+        h += sideRow(aId) + sideRow(dId);
+        if (s.big && s.big.length) h += '<div class="wbig">' + s.big.slice(-4).reverse().map((c) => `<div class="hasloc" data-lp="${c.q}" title="눌러서 위치로 이동">${yearStr(c.y)} · ${s.nm[c.t] || '?'}이(가) ${s.nm[c.f] || '?'}의 ${S.cityName[c.q] || S.provName[c.q] || '주요 도시'} 점령</div>`).join('') + '</div>';
+        h += '</div>';
+      }
+    }
   } else if (tab === 'god') {
     h = '<h3>신의 권능</h3><p>권능을 고르면 지도에 영향 범위와 예상 효과가 미리 보입니다. 지역을 눌러 발동하면 실제 변화를 요약해 보여 줍니다.</p>' + Object.entries(sim.POWERS).map(([k, v]) => `<button class="pw ${selPower === k ? 'on' : ''}" data-p="${k}">${v.name}<small>${v.desc}</small></button>`).join('');
     h += `<button class="pw ${S.auto ? 'on' : ''}" id="autoBtn">자동 신 위임: ${S.auto ? '켜짐' : '꺼짐'}<small>신이 알아서 균형을 맞춥니다.</small></button>`;
@@ -422,7 +464,7 @@ function renderPanel(auto) {
     h = '<h3>도움말</h3><p class="fine">드래그로 이동, 휠/핀치로 확대. 지역을 누르면 정보가 나옵니다. 위쪽 버튼으로 속도와 지도 모드를 바꾸고, 권능 탭에서 신의 힘을 쓰거나 자동 신 위임을 켜 보세요. 아무것도 하지 않아도 세계는 계속 흘러갑니다.</p><h3>설정</h3><button class="pw" id="bSave">지금 저장</button><button class="pw" id="bExp">파일로 내보내기</button><button class="pw" id="bImp">파일에서 불러오기</button><button class="pw" id="bNew">새 세계 시작</button><input type="file" id="fImp" class="hide" accept=".json">';
     h += '<p class="fine">지도 데이터: Natural Earth (퍼블릭 도메인). 지구 국경은 근사이며 대체 역사입니다.</p>';
   }
-  const sig = tab === 'god' ? 'god' + selPower + S.auto : tab + h.length + (tab === 'world' || tab === 'log' || tab === 'cmp' ? Math.floor(S.year / 5) : '');
+  const sig = tab === 'god' ? 'god' + selPower + S.auto : tab + h.length + (tab === 'world' || tab === 'log' || tab === 'cmp' || tab === 'war' ? Math.floor(S.year / 5) : '');
   if (auto && sig === panelSig) return;
   panelSig = sig; body.innerHTML = h;
   for (const a of body.querySelectorAll('[data-n]')) a.onclick = (e) => { e.preventDefault(); const n = S.nations[+a.dataset.n]; R.sel = n.cap; R.paintHL(); R.focus(n.cap, 3); tab = 'sel'; renderPanel(); };
@@ -435,6 +477,7 @@ function renderPanel(auto) {
   const q = (id) => body.querySelector('#' + id);
   for (const b of body.querySelectorAll('[data-cmp]')) b.onclick = () => addToCompare(+b.dataset.cmp);
   for (const b of body.querySelectorAll('[data-cmpgo]')) b.onclick = () => goTo(+b.dataset.cmpgo);
+  for (const b of body.querySelectorAll('[data-warfront]')) b.onclick = () => { const w = S.wars.find((x) => x.id === +b.dataset.warfront); if (focusWar(w)) toast('⚔ 전선으로 이동합니다'); };
   for (const b of body.querySelectorAll('[data-cmpm]')) b.onclick = () => { cmpMetric = b.dataset.cmpm; try { localStorage.setItem('genesis-atlas-cmpmetric', cmpMetric); } catch (e) {} panelSig = ''; renderPanel(); };
   const csa = q('cmpSelA'), csb = q('cmpSelB');
   if (csa) csa.onchange = () => { cmpA = +csa.value; panelSig = ''; renderPanel(); };
