@@ -211,6 +211,7 @@ function loop(t) { if (!loop.n) console.log('loop1'); loop.n = (loop.n || 0) + 1
     }
   }
   if (needRefresh && t - lastRefresh > 100) { R.refresh(S); lastRefresh = t; needRefresh = false; }
+  R.followId = followId; // 밀집 전장 정리가 추적 부대를 강조하도록 렌더러에 전달
   R.tickPhase = Math.min(1, acc); // 부대 보간용: 현재 틱(1년)의 경과 비율. 일시정지 중에는 acc가 멈춰 있어 위치가 그대로 유지된다
   { const c = R.cam; const key = c.x + '|' + c.y + '|' + c.z + '|' + R.sel + '|' + R.mode + '|' + R.cssW + R.cssH + '|' + lastRefresh; if (speed > 0 || R.effects.length || R.pvOn || key !== loop.dk || R.fresh) { R.draw(dt, S); loop.dk = key; R.fresh = false; } }
   $('year').textContent = yearStr(S.year); $('era').textContent = ERA_NAMES[Math.min(9, Math.floor(S.stats.maxT))];

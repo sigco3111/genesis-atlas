@@ -1,6 +1,6 @@
 // 렌더러: 지형 사전 렌더(2배 해상도) + 정치/문화 등 오버레이 + 라벨/도시/효과
 import { W, H, BIOMES } from './world.js';
-import { planLabels, nationBudget, cityBudget } from './labels.js';
+import { planLabels, nationBudget, cityBudget, planArmyLabels } from './labels.js';
 import { visibleCaps, capAlpha } from './warwatch.js';
 import { pathPos } from './sim.js';
 import { GOODS, NG, resOf, mainRes, goodCss } from './econ.js';
@@ -80,7 +80,7 @@ export class Renderer {
     this.cells = buildCellIndex(map);
     // 지방 경계 마스크 (셀 단위로 이웃과 다른 지방)
     this.cam = { x: W / 2, y: H / 2, z: 1 }; this.minZ = 0.5;
-    this.mode = 'political'; this.dirty = true; this.sel = -1; this.hover = -1; this.trackId = -1; this.effects = []; this.time = 0; this.capAge = 3;
+    this.mode = 'political'; this.dirty = true; this.sel = -1; this.hover = -1; this.trackId = -1; this.followId = -1; this.effects = []; this.time = 0; this.capAge = 3;
     this.provColor = new Uint32Array(map.provinces.length); this.ownerKey = new Int32Array(map.provinces.length).fill(-1);
     this.warPts = [];
     this.histWar = null;
@@ -438,6 +438,15 @@ export class Renderer {
     const rel = z / this.minZ;
     const cityMin = z > 3 ? 1 : z > 2 ? 2 : z > 1.3 ? 3 : 4;
     const cityCands = [];
+    // 밀집 전장 가독성: 부대 칩 주변의 도시 이름은 숨긴다 (국가 라벨과 같은 규칙)
+    const apPre = [];
+    if (S.armies && S.armies.length && this.showArmies !== false) {
+      for (const a of S.armies) {
+        const smA = this.armySm && this.armySm.get(a.id);
+        const [ax, ay] = this.w2s(smA && smA.rx != null ? smA.rx : a.x, smA && smA.ry != null ? smA.ry : a.y);
+        if (ax > -40 && ay > -40 && ax < this.cssW + 40 && ay < this.cssH + 40) apPre.push(ax, ay);
+      }
+    }
     for (let p = 0; p < map.provinces.length; p++) {
       const lv = S.P.city[p]; if (lv < cityMin) continue; const o = map.provinces[p];
       const [x, y] = this.w2s(o.ax, o.ay); if (x < -20 || y < -20 || x > this.cssW + 20 || y > this.cssH + 20) continue;
@@ -446,8 +455,12 @@ export class Renderer {
       ctx.fillStyle = cap ? '#ffd24a' : '#fff6e0'; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
       if (this.showLabels !== false && S.cityName[p] && ((cap && lv >= 2 && z > 2.6) || z > 5)) {
         const fz = cap ? Math.min(15, 10 + z * 0.55) : Math.min(14, 9 + z * 0.5);
-        ctx.font = `600 ${fz}px "Noto Sans KR", system-ui, sans-serif`;
-        cityCands.push({ t: S.cityName[p], x, y: y + r + 9, size: fz, w: ctx.measureText(S.cityName[p]).width, big: cap ? 1000 + lv : lv, gold: cap });
+        let nearA = false;
+        for (let i = 0; i < apPre.length; i += 2) { if (Math.abs(apPre[i] - x) < 34 && Math.abs(apPre[i + 1] - (y + r + 9)) < 26) { nearA = true; break; } }
+        if (!nearA) {
+          ctx.font = `600 ${fz}px "Noto Sans KR", system-ui, sans-serif`;
+          cityCands.push({ t: S.cityName[p], x, y: y + r + 9, size: fz, w: ctx.measureText(S.cityName[p]).width, big: cap ? 1000 + lv : lv, gold: cap });
+        }
       }
     }
     for (const q of planLabels(cityCands, cityBudget(rel))) {
@@ -584,10 +597,10 @@ export class Renderer {
       }
       if (this.fl && this.fl.length) {
         const dt = this.lastDt || 1 / 60; ctx.textAlign = 'center';
-        const crowdFl = items.length >= 3; let flDrawn = 0; // 붐비면 사상자 숫자는 큰 것 위주로 2개까지만
+        const crowdFl = items.length >= 3, flCap = items.length >= 6 ? 1 : 2; let flDrawn = 0; // 붐비면 사상자 숫자는 큰 것 위주로만 (아주 붐비면 1개)
         for (let i = this.fl.length - 1; i >= 0; i--) {
           const f = this.fl[i]; f.t += dt; if (f.t > 1.7) { this.fl.splice(i, 1); continue; }
-          if (crowdFl && (!f.big || flDrawn >= 2)) continue; flDrawn++;
+          if (crowdFl && (!f.big || flDrawn >= flCap)) continue; flDrawn++;
           const [fx, fy] = this.w2s(f.wx, f.wy); const rise = f.t * ss * 1.8, al = Math.min(1, (1.7 - f.t) / 0.9);
           ctx.globalAlpha = al; ctx.font = '800 ' + Math.round(ss * (f.big ? 1.45 : 1.15)) + 'px system-ui,sans-serif';
           ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(30,0,0,.9)'; ctx.fillStyle = f.big ? '#ff6b5e' : '#ffb199';
@@ -596,29 +609,39 @@ export class Renderer {
         ctx.globalAlpha = 1;
       }
       for (const c of clashes) drawClash(ctx, c[0], c[1], c[2], c[3], ss, this.time + c[4] * 0.7);
-      const lblRects = []; // 병력 숫자(우선) → 지휘관 이름(선택) 순으로 겹침 없이 배치
+      // 밀집 전장 표시 정리: 병력 라벨은 칩 상자를 피해 놓고, 붐비면 큰 부대 5개 + 추적 부대만 남긴다
+      const followIt = this.followId >= 0 ? items.find((it) => it.a.id === this.followId) || null : null;
+      const fsL = Math.max(9.5, ss);
+      const labPlaced = new Map();
+      if (z >= 1.1) {
+        ctx.font = '700 ' + fsL + 'px system-ui,sans-serif';
+        const litems = [];
+        for (const it of items) {
+          const { a, px, py } = it;
+          const cnt = a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : String(Math.round(a.men));
+          const nm = a.cmd && z >= (this.cssW > 700 ? 2.6 : 3.4) ? a.cmd.n + ' ' : '';
+          const tx = nm + cnt;
+          litems.push({ id: a.id, x: px, y: py, w: ctx.measureText(tx).width, size: fsL, men: a.men, follow: it === followIt, tx });
+        }
+        const budget = litems.length > 6 ? 5 : Infinity;
+        for (const q of planArmyLabels(litems, { chipW: bw, chipUp: ss * 1.8, chipDown: ss * 1.1, downY: ss * 2.0 + fsL * 0.35, upY: ss * 2.5, gapY: fsL * 1.05, budget })) labPlaced.set(q.id, q);
+      }
       items.sort((p, q) => q.a.men - p.a.men);
       for (const it of items) {
         const { a, nn, px, py } = it;
         const col = `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})`;
         (this._ap || (this._ap = [])).push(px, py);
         drawArmy(ctx, px, py, ss, col, this.time + a.id * 0.9, it.sm && it.sm.noContact ? 'garrison' : a.st, Math.min(9, Math.max(0, Math.floor(nn.tech || 0))), a);
-        if (z >= 1.1) {
-          const fs = Math.max(9.5, ss);
-          ctx.font = '700 ' + fs + 'px system-ui,sans-serif'; ctx.textAlign = 'center';
-          ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(5,15,28,.9)';
-          const cnt = a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : String(Math.round(a.men));
-          const nm = a.cmd && z >= (this.cssW > 700 ? 2.6 : 3.4) ? a.cmd.n + ' ' : '';
-          const hit = (x0, y0, x1, y1) => lblRects.some((q) => x0 < q[2] && x1 > q[0] && y0 < q[3] && y1 > q[1]);
-          const place = (tx) => {
-            const tw = ctx.measureText(tx).width; let ly = py + ss * 2.0 + fs * 0.35;
-            for (let k = 0; k < 3; k++) { if (!hit(px - tw / 2, ly - fs, px + tw / 2, ly + fs * 0.3)) return [tx, tw, ly]; ly += fs * 1.05; }
-            return null;
-          };
-          let pl = nm ? place(nm + cnt) : null; if (!pl) pl = place(cnt);
-          if (!pl) { const tw = ctx.measureText(cnt).width; pl = [cnt, tw, py + ss * 2.0 + fs * 0.35]; }
-          const [tx, tw, ly] = pl; lblRects.push([px - tw / 2, ly - fs, px + tw / 2, ly + fs * 0.3]);
-          ctx.strokeText(tx, px, ly); ctx.fillStyle = '#fff'; ctx.fillText(tx, px, ly);
+        if (it === followIt) { // 추적 중인 부대: 금색 링으로 어느 밀집 전장에서도 눈에 띄게
+          const pu = 0.5 + 0.5 * Math.sin(this.time * 4);
+          ctx.save(); ctx.strokeStyle = `rgba(255,210,74,${0.7 + 0.3 * pu})`; ctx.lineWidth = Math.max(2, ss * 0.2);
+          ctx.beginPath(); ctx.arc(px, py, ss * (1.6 + 0.15 * pu), 0, 7); ctx.stroke(); ctx.restore();
+        }
+        const q = labPlaced.get(a.id);
+        if (q) {
+          ctx.font = '700 ' + fsL + 'px system-ui,sans-serif'; ctx.textAlign = 'center';
+          ctx.lineWidth = 3.5; ctx.strokeStyle = q.follow ? 'rgba(30,22,4,.9)' : 'rgba(5,15,28,.9)';
+          ctx.strokeText(q.tx, q.x, q.y); ctx.fillStyle = q.follow ? '#ffd24a' : '#fff'; ctx.fillText(q.tx, q.x, q.y);
         }
       }
     }

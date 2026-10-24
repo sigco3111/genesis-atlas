@@ -44,3 +44,42 @@ export function planLabels(cands, budget, opts = {}) {
   }
   return placed;
 }
+
+// 밀집 전장 부대 라벨 계획 (순수 함수, 테스트 가능)
+// 부대 칩이 차지하는 상자를 피해 병력 라벨을 놓는다. 붐비면 큰 부대 위주로
+// 줄이고, 추적(follow) 부대는 예산과 무관하게 항상 남긴다.
+// items: [{ id, x, y, w, size, men, follow, tx }]
+//   x,y = 칩 중심 화면 좌표, w = 라벨 너비(px), size = 글자 크기(px)
+// opts:
+//   chipW/chipUp/chipDown: 칩+깃발+막대 상자 (중심 기준 너비·위·아래 거리)
+//   downY/upY: 칩 중심에서 아래/위 첫 후보 라벨 중심까지 거리
+//   gapY: 후보 사이 세로 간격, budget: 추적 외 라벨 최대 수 (기본 무제한)
+// 반환: [{ id, x, y, tx, follow }] — y는 라벨 중심. 자리가 없으면 생략하고,
+//        추적 부대만 첫 자리에 강제 배치한다.
+export function planArmyLabels(items, opts = {}) {
+  const chipW = opts.chipW || 30, chipUp = opts.chipUp == null ? 18 : opts.chipUp, chipDown = opts.chipDown == null ? 11 : opts.chipDown;
+  const downY = opts.downY == null ? 23 : opts.downY, upY = opts.upY == null ? 25 : opts.upY;
+  const gapY = opts.gapY || 11;
+  const budget = opts.budget == null ? Infinity : opts.budget;
+  const chipBoxes = items.map((it) => [it.x - chipW / 2, it.y - chipUp, it.x + chipW / 2, it.y + chipDown]);
+  const labBoxes = [];
+  const hit = (b) => {
+    for (const q of chipBoxes) if (!(b[2] < q[0] || b[0] > q[2] || b[3] < q[1] || b[1] > q[3])) return true;
+    for (const q of labBoxes) if (!(b[2] < q[0] || b[0] > q[2] || b[3] < q[1] || b[1] > q[3])) return true;
+    return false;
+  };
+  const box = (it, ly) => [it.x - it.w / 2 - 2, ly - it.size / 2 - 1, it.x + it.w / 2 + 2, ly + it.size / 2 + 1];
+  const sorted = [...items].sort((a, b) => (b.follow ? 1 : 0) - (a.follow ? 1 : 0) || b.men - a.men);
+  const placed = [];
+  let room = budget;
+  for (const it of sorted) {
+    if (!it.follow && room <= 0) continue;
+    let ly = null;
+    for (let k = 0; k < 3 && ly == null; k++) { const c = it.y + downY + k * gapY; if (!hit(box(it, c))) ly = c; }
+    for (let k = 0; k < 2 && ly == null; k++) { const c = it.y - upY - k * gapY; if (!hit(box(it, c))) ly = c; }
+    if (ly == null) { if (it.follow) ly = it.y + downY; else continue; } // 추적 부대는 겹쳐도 첫 자리에
+    labBoxes.push(box(it, ly)); placed.push({ id: it.id, x: it.x, y: ly, tx: it.tx, follow: !!it.follow });
+    if (!it.follow) room--;
+  }
+  return placed;
+}
