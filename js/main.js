@@ -672,7 +672,7 @@ function renderPanel(auto) {
         h += `<div class="whead">🎖 <b>${CMD_TRAITS[sel.t] ? CMD_TRAITS[sel.t].key + ' ' : ''}${sel.n}</b></div>`;
         h += `<div class="wmeta"><i style="color:rgb(${sn ? sn.rgb : [140, 150, 160]})">■</i> ${sn ? sn.name : '?'} · ${sel.b}전 ${sel.w}승 ${sel.l}패${swr}${sel.died ? ` · ⚰ ${yearStr(sel.died)} 전사` : activeCmd.has(sel.id) ? ' · 현역' : ''}</div>`;
         if (!sel.maj.length) h += '<div class="wline">아직 주요 전투 기록이 없습니다.</div>';
-        else h += '<div class="wbig">' + sel.maj.map((mm) => `<div class="${mm.p >= 0 ? 'hasloc' : ''}"${mm.p >= 0 ? ` data-lp="${mm.p}" title="눌러서 위치로 이동"` : ''}>${yearStr(mm.y)} · ${mm.vs}와의 교전 ${mm.r > 0 ? '승리' : mm.r < 0 ? '패배' : '무승부'}${mm.place ? ' · ' + mm.place : ''} (아군 -${cmen(mm.ml)} · 상대 -${cmen(mm.fl)})</div>`).join('') + '</div>';
+        else h += '<div class="wbig">' + sel.maj.map((mm) => `<div class="${mm.p >= 0 ? 'hasloc' : ''}"${mm.p >= 0 ? ` data-lp="${mm.p}" title="눌러서 위치로 이동"` : ''}>${yearStr(mm.y)} · ${sim.josa(mm.vs + '와(과)')}의 교전 ${mm.r > 0 ? '승리' : mm.r < 0 ? '패배' : '무승부'}${mm.place ? ' · ' + mm.place : ''} (아군 -${cmen(mm.ml)} · 상대 -${cmen(mm.fl)})</div>`).join('') + '</div>';
         h += '<div class="wbtns"><button class="chip" data-cmd="0">닫기</button></div></div>';
       }
       for (const r of careers.slice(0, 10)) {
