@@ -506,13 +506,35 @@ export class Renderer {
           const pp = pathPos(a.path, (sm.pprog + (sm.prog - sm.pprog) * ph) / a.dlen); rx = pp[0]; ry = pp[1];
         } else { rx = sm.px + (sm.x - sm.px) * ph; ry = sm.py + (sm.y - sm.py) * ph; }
         sm.rx = rx; sm.ry = ry;
-        // 병력이 줄면 사상자 숫자가 위로 떠오른다 (전투·포위·소모를 눈으로 읽게)
-        if (sm.men != null && a.men < sm.men - 40 && (a.st === 'battle' || a.st === 'siege')) { (this.fl = this.fl || []).push({ wx: a.x, wy: a.y, txt: '-' + Math.round(sm.men - a.men), t: 0, dx: ((this.flN = (this.flN || 0) + 1) % 5 - 2) * 0.9, big: sm.men - a.men > a.men0 * 0.08 }); if (this.fl.length > 40) this.fl.shift(); }
-        sm.men = a.men;
         const k = Math.round(rx / 1.2) + ':' + Math.round(ry / 1.2); if (!groups.has(k)) groups.set(k, []); groups.get(k).push([a, sm]);
       }
       if (this.armySm.size > smSeen.size + 40) { for (const id of this.armySm.keys()) if (!smSeen.has(id)) this.armySm.delete(id); }
       this.armySmWarm = 0;
+      // 사상자 숫자 연출 게이트: 시뮬 피해는 즉시 적용되지만, 숫자는 칩이 시각적으로 접촉한 뒤에만 띄운다.
+      // 도착 틱의 활강 중이면 합산해 두고, 접촉 시 합산 표시, 접촉 전 종료되면 칩 위에 마무리 표시. 위치는 항상 렌더 칩 기준.
+      for (const a of S.armies) {
+        const sm = this.armySm.get(a.id); if (!sm || sm.rx == null) continue;
+        const inCombat = a.st === 'battle' || a.st === 'siege';
+        let contact = false;
+        if (inCombat) {
+          if (a.st === 'battle') {
+            for (const b of S.armies) {
+              if (b === a || b.st !== 'battle' || b.nat === a.nat) continue;
+              const bm = this.armySm.get(b.id); if (!bm || bm.rx == null) continue;
+              if (Math.hypot(bm.rx - sm.rx, bm.ry - sm.ry) <= 20) { contact = true; break; }
+            }
+          } else contact = Math.hypot(sm.rx - a.x, sm.ry - a.y) <= 6; // 포위: 칩이 시뮬 도착점까지 활강 완료
+        }
+        sm.noContact = inCombat && !contact;
+        const drop = sm.men != null && a.men < sm.men - 40 && inCombat ? Math.round(sm.men - a.men) : 0;
+        if (sm.noContact) { if (drop) sm.pendDmg = (sm.pendDmg || 0) + drop; }
+        else {
+          const tot = (sm.pendDmg || 0) + drop;
+          if (tot > 0) { (this.fl = this.fl || []).push({ wx: sm.rx, wy: sm.ry, txt: '-' + tot, t: 0, dx: ((this.flN = (this.flN || 0) + 1) % 5 - 2) * 0.9, big: tot > a.men0 * 0.08 }); if (this.fl.length > 40) this.fl.shift(); }
+          sm.pendDmg = 0;
+        }
+        sm.men = a.men;
+      }
       // 행군 경로: 남은 길을 국가 색 점선으로 보여 줘 어디로 치고 가는지 읽히게 한다
       if (z >= 1.4) {
         for (const a of S.armies) {
@@ -542,7 +564,7 @@ export class Renderer {
           const [bx, by] = this.w2s(sm.rx != null ? sm.rx : sm.x, sm.ry != null ? sm.ry : sm.y);
           const px = bx + ox, py = by + oy;
           if (px < -30 || py < -30 || px > this.cssW + 30 || py > this.cssH + 30) continue;
-          items.push({ a, nn, px, py });
+          items.push({ a, nn, px, py, sm });
         }
       }
       // 가까이 겹친 칩은 서로 밀어내 읽히게 하고, 교전 중인 적대 부대는 점선으로 잇고 가운데에 충돌 불꽃을 그린다
@@ -580,7 +602,7 @@ export class Renderer {
         const { a, nn, px, py } = it;
         const col = `rgb(${nn.rgb[0]},${nn.rgb[1]},${nn.rgb[2]})`;
         (this._ap || (this._ap = [])).push(px, py);
-        drawArmy(ctx, px, py, ss, col, this.time + a.id * 0.9, a.st, Math.min(9, Math.max(0, Math.floor(nn.tech || 0))), a);
+        drawArmy(ctx, px, py, ss, col, this.time + a.id * 0.9, it.sm && it.sm.noContact ? 'garrison' : a.st, Math.min(9, Math.max(0, Math.floor(nn.tech || 0))), a);
         if (z >= 1.1) {
           const fs = Math.max(9.5, ss);
           ctx.font = '700 ' + fs + 'px system-ui,sans-serif'; ctx.textAlign = 'center';
@@ -1087,4 +1109,4 @@ function ramp(t, stops, a) {
   const n = stops.length - 1; const f = Math.min(n - 1e-6, Math.max(0, t * n)); const i = Math.floor(f), u = f - i; const A = stops[i], B = stops[i + 1];
   const r = (A[0] + (B[0] - A[0]) * u) | 0, g = (A[1] + (B[1] - A[1]) * u) | 0, b = (A[2] + (B[2] - A[2]) * u) | 0;
   return ((a << 24) | (b << 16) | (g << 8) | r) >>> 0;
-    }
+}
