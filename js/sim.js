@@ -1,9 +1,9 @@
 // 문명 시뮬레이션 코어 (지방 단위 집계 모델). DOM/Canvas에 의존하지 않는다.
-import { RNG } from './rng.js';
-import { makeLang, genName, genReligion, genCultureName, hslToRgb, ERA_NAMES, yearStr, numStr } from './names.js';
-import { complement, stepEcon, ensureEco, newEco, dockShip, refundCargo, stabBonus } from './econ.js';
-import { snapWar, recordCap, buildSummary, pushSummary } from './warhist.js';
-import { stepArmies, onWarEnd } from './units.js';
+import { RNG } from './rng.js?v=100';
+import { makeLang, genName, genReligion, genCultureName, hslToRgb, ERA_NAMES, yearStr, numStr } from './names.js?v=100';
+import { complement, stepEcon, ensureEco, newEco, dockShip, refundCargo, stabBonus } from './econ.js?v=100';
+import { snapWar, recordCap, buildSummary, pushSummary } from './warhist.js?v=100';
+import { stepArmies, onWarEnd } from './units.js?v=100';
 
 export const VERSION = 1;
 const clamp = (x, a, b) => x < a ? a : x > b ? b : x;

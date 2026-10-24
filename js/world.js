@@ -1,5 +1,5 @@
 // 지도 데이터: 실제 지구(Natural Earth 기반 사전 처리) 또는 절차 생성 지도 + 기후/생물군계
-import { RNG, fbm, valueNoise } from './rng.js';
+import { RNG, fbm, valueNoise } from './rng.js?v=100';
 
 export const W = 1280, H = 512, LAT_TOP = 84, DEG = 0.28125;
 export const latOf = (y) => LAT_TOP - (y + 0.5) * DEG;

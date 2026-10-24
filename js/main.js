@@ -1,15 +1,15 @@
-import { generateMap, MAP_KINDS, buildEarth, W, H } from './world.js';
-import { Renderer } from './render.js';
-import * as sim from './sim.js';
-import { CAP_AGE_STEPS, nextCapAge, capAgeLabel, trackedWarIds, warEvents } from './warwatch.js';
-import { capsBySide, warMapPoints, fitWarView } from './warhist.js';
-import { METRICS, seriesOf, chartMax, commonWindow, changeOf, changeDir, fmtChange } from './cmptrend.js';
-import { GOODS, NG, resOf, goodCss } from './econ.js';
-import { yearStr, numStr, ERA_NAMES } from './names.js';
-import { unitOf, CMD_TRAITS } from './units.js';
-import { BATTLE_CARDS_MAX } from './battles.js';
-import { followPos, followEase } from './follow.js';
-import { pickSpectate, spectateLive, SPECTATE_MIN_MEN } from './spectate.js';
+import { generateMap, MAP_KINDS, buildEarth, W, H } from './world.js?v=100';
+import { Renderer } from './render.js?v=100';
+import * as sim from './sim.js?v=100';
+import { CAP_AGE_STEPS, nextCapAge, capAgeLabel, trackedWarIds, warEvents } from './warwatch.js?v=100';
+import { capsBySide, warMapPoints, fitWarView } from './warhist.js?v=100';
+import { METRICS, seriesOf, chartMax, commonWindow, changeOf, changeDir, fmtChange } from './cmptrend.js?v=100';
+import { GOODS, NG, resOf, goodCss } from './econ.js?v=100';
+import { yearStr, numStr, ERA_NAMES } from './names.js?v=100';
+import { unitOf, CMD_TRAITS } from './units.js?v=100';
+import { BATTLE_CARDS_MAX } from './battles.js?v=100';
+import { followPos, followEase } from './follow.js?v=100';
+import { pickSpectate, spectateLive, SPECTATE_MIN_MEN } from './spectate.js?v=100';
 const $ = (id) => document.getElementById(id);
 const SAVE = 'genesis-atlas-save-v1';
 const CAPAGE_PREF = 'genesis-atlas-capage', WARPAUSE_PREF = 'genesis-atlas-warpause';
@@ -18,6 +18,8 @@ try { autoWarPause = localStorage.getItem(WARPAUSE_PREF) === '1'; } catch (e) {}
 function readCapAge() { try { const raw = localStorage.getItem(CAPAGE_PREF); if (raw === null) return 3; const v = +raw; return CAP_AGE_STEPS.includes(v) ? v : 3; } catch (e) { return 3; } }
 let map = null, S = null, R = null, running = false, speed = 1, prevSpeed = 1, acc = 0, last = 0, tab = 'world', lastRefresh = 0, needRefresh = true, earthCache = null;
 const SPEEDS = [[0, '⏸'], [0.5, '0.5'], [1, '1'], [3, '3'], [10, '10'], [100, '100']];
+const VERSION = 'v1.0';
+{ const a = $('ver'); if (a) a.textContent = VERSION; const b = $('verStart'); if (b) b.textContent = VERSION; }
 const MODES = [['political', '정치'], ['culture', '문화'], ['religion', '종교'], ['pop', '인구'], ['tech', '기술'], ['unrest', '불안'], ['res', '자원'], ['terrain', '지형']];
 
 function toast(t) { const e = $('toast'); e.textContent = t; e.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => e.classList.remove('show'), 2400); }

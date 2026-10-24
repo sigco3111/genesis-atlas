@@ -1,9 +1,9 @@
 // 렌더러: 지형 사전 렌더(2배 해상도) + 정치/문화 등 오버레이 + 라벨/도시/효과
-import { W, H, BIOMES } from './world.js';
-import { planLabels, nationBudget, cityBudget, planArmyLabels } from './labels.js';
-import { visibleCaps, capAlpha } from './warwatch.js';
-import { pathPos } from './sim.js';
-import { GOODS, NG, resOf, mainRes, goodCss } from './econ.js';
+import { W, H, BIOMES } from './world.js?v=100';
+import { planLabels, nationBudget, cityBudget, planArmyLabels } from './labels.js?v=100';
+import { visibleCaps, capAlpha } from './warwatch.js?v=100';
+import { pathPos } from './sim.js?v=100';
+import { GOODS, NG, resOf, mainRes, goodCss } from './econ.js?v=100';
 const S2 = 2, TW = W * S2, TH = H * S2;
 const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 const BCOL = [null, '#e8eef1', '#b4bfad', '#5b7d5a', '#6c9856', '#a8b45e', '#d6c086', '#b8b061', '#3e7d48', '#8a8377', '#f3f5f7', '#b2ad73'].map((c) => c && hex(c));

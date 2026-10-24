@@ -1,5 +1,5 @@
 // 주요 전투 자동 관전 보조: 카메라가 알아서 따라갈 큰 교전을 고른다 (순수 함수, 테스트 가능)
-import { pairKey } from './battles.js';
+import { pairKey } from './battles.js?v=100';
 
 export const SPECTATE_MIN_MEN = 3000; // 양측 초기 병력 합이 이 이상인 교전만 '주요 전투'로 본다 (격돌 로그 기준 1600보다 높게)
 

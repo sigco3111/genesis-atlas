@@ -1,5 +1,5 @@
 // 전쟁 결과 요약: 개전 스냅샷·점령 기록·종전 요약 집계 (순수 함수, 테스트 가능)
-import { yearStr } from './names.js';
+import { yearStr } from './names.js?v=100';
 
 export const WARHIST_MAX = 60;   // 보관하는 종전 요약 최대 수 (오래된 것부터 덮어씀)
 export const WARCAPS_MAX = 600;  // 진행 중 전쟁이 기억하는 점령 기록 최대 수

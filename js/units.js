@@ -1,7 +1,7 @@
 // 자율 부대 전투: 전쟁 중인 국가가 스스로 부대를 편성해 행군·회전·포위로 싸운다.
 // DOM/Canvas에 의존하지 않는 순수 로직 모듈. 시각화는 render.js가 S.armies를 읽어 처리한다.
-import { findLandPath, pathLen, captureProvince, addLog } from './sim.js';
-import { engTouch, engSweep } from './battles.js';
+import { findLandPath, pathLen, captureProvince, addLog } from './sim.js?v=100';
+import { engTouch, engSweep } from './battles.js?v=100';
 
 export const ARMY_GLOBAL_MAX = 70;      // 세계 전체 부대 상한
 export const ARMY_SPEED = 26;           // 1년에 이동하는 지도 픽셀. 무역선(26px/년)과 같은 체감 속도로 낮춰 행군이 여러 해에 걸쳐 눈에 보이게 한다

@@ -1,7 +1,7 @@
 // 지역 자원·교역 경제. DOM/Canvas에 의존하지 않는다.
 // 지방마다 자원 매장량이 정해져 있고(지도에서 결정, 저장 불필요), 국가는 생산·소비·비축·국고를 갖는다.
 // 남는 물자는 무역선이 실제로 실어 나르고, 도착한 화물이 비축으로 들어가 성장·기술·군사·안정도에 반영된다.
-import { valueNoise } from './rng.js';
+import { valueNoise } from './rng.js?v=100';
 const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
 
 export const GOODS = [
