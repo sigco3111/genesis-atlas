@@ -7,6 +7,7 @@ import { METRICS, seriesOf, chartMax, commonWindow, changeOf, changeDir, fmtChan
 import { GOODS, NG, resOf, goodCss } from './econ.js';
 import { yearStr, numStr, ERA_NAMES } from './names.js';
 import { unitOf, CMD_TRAITS } from './units.js';
+import { followPos, followEase } from './follow.js';
 const $ = (id) => document.getElementById(id);
 const SAVE = 'genesis-atlas-save-v1';
 const CAPAGE_PREF = 'genesis-atlas-capage', WARPAUSE_PREF = 'genesis-atlas-warpause';
@@ -78,7 +79,7 @@ function boot() { { const lg = $('reslegend'); if (lg) lg.innerHTML = '<b>자원
   $('start').classList.add('hide');
   R = new Renderer($('map'), map); if (!boot.done) { boot.done = true; bindInput(); window.addEventListener('resize', () => { R.resize(); needRefresh = true; }); requestAnimationFrame(loop); }
   R.capAge = readCapAge(); prevTrkWars = trackedWarIds(S);
-  R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = window.__view || 'political'; R.sel = -1; selPower = null; histWar = null; { const wv0 = $('warview'); if (wv0) wv0.classList.add('hide'); } pwCount = 0; pwPending = null; updateArmChip(); R.trackId = S.track ? S.track.id : -1; cmpA = cmpB = -1; speed = window.__speed ?? 1; running = true; needRefresh = true; buildBars(); renderPanel(); renderTrack();
+  R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = window.__view || 'political'; R.sel = -1; selPower = null; histWar = null; { const wv0 = $('warview'); if (wv0) wv0.classList.add('hide'); } pwCount = 0; pwPending = null; followId = -1; updateArmChip(); updateFollowChip(); R.trackId = S.track ? S.track.id : -1; cmpA = cmpB = -1; speed = window.__speed ?? 1; running = true; needRefresh = true; buildBars(); renderPanel(); renderTrack();
   let pref = null; try { pref = localStorage.getItem(PANEL_PREF); } catch (e) {}
   setPanelOpen(pref === null ? !isMobileLayout() : pref === '1', false);
   toast('휠·드래그로 이동, 지역을 눌러 살펴보세요');
@@ -100,6 +101,7 @@ function buildBars() {
 let warFocusIdx = 0;
 function focusWar(w) {
   if (!w) return false;
+  stopFollow();
   const wf = (R.warPts || []).find((x) => x.id === w.id);
   let x, y;
   if (wf && wf.pts.length) { x = wf.pts.reduce((t, p) => t + p[0], 0) / wf.pts.length; y = wf.pts.reduce((t, p) => t + p[1], 0) / wf.pts.length; }
@@ -133,7 +135,7 @@ function showWarOnMap(sumId) {
   const f = fitWarView(pts, R.cssW, R.cssH, R.minZ, ins);
   // focusWorld는 줌을 키우기만 하고(Math.max), clamp는 세계 가장자리 근처의 점을 플로터 아래로 밀어 넣으므로
   // 화면 맞춤에는 계산된 위치·줌을 그대로 설정한다(세계 밖 배경이 잠시 보일 수 있음)
-  if (f) { R.cam.x = f.x; R.cam.y = f.y; R.cam.z = f.z; needRefresh = true; }
+  if (f) { stopFollow(); R.cam.x = f.x; R.cam.y = f.y; R.cam.z = f.z; needRefresh = true; }
   toast('🗺 전쟁이 벌어진 곳을 지도에 표시합니다');
 }
 function hideWarView() {
@@ -198,12 +200,22 @@ function loop(t) { if (!loop.n) console.log('loop1'); loop.n = (loop.n || 0) + 1
     }
     prevTrkWars = cur;
   } else prevTrkWars = [];
+  if (followId >= 0 && S) {
+    const fa = (S.armies || []).find((x) => x.id === followId);
+    if (!fa) stopFollow('추적하던 부대가 해산되었습니다');
+    else {
+      const sm = R.armySm && R.armySm.get(fa.id);
+      const [tx, ty] = followPos(fa, sm, R.showArmies); // 화면에 그려진 칩 위치를 따라간다
+      const [nx, ny] = followEase(R.cam.x, R.cam.y, tx, ty, dt);
+      R.cam.x = nx; R.cam.y = ny; R.clamp();
+    }
+  }
   if (needRefresh && t - lastRefresh > 100) { R.refresh(S); lastRefresh = t; needRefresh = false; }
   R.tickPhase = Math.min(1, acc); // 부대 보간용: 현재 틱(1년)의 경과 비율. 일시정지 중에는 acc가 멈춰 있어 위치가 그대로 유지된다
   { const c = R.cam; const key = c.x + '|' + c.y + '|' + c.z + '|' + R.sel + '|' + R.mode + '|' + R.cssW + R.cssH + '|' + lastRefresh; if (speed > 0 || R.effects.length || R.pvOn || key !== loop.dk || R.fresh) { R.draw(dt, S); loop.dk = key; R.fresh = false; } }
   $('year').textContent = yearStr(S.year); $('era').textContent = ERA_NAMES[Math.min(9, Math.floor(S.stats.maxT))];
   $('spop').textContent = '인구 ' + numStr(S.stats.world); $('snat').textContent = '국가 ' + S.stats.alive; $('swar').textContent = '전쟁 ' + S.wars.length;
-  if (t - (loop.pt || 0) > 800) { loop.pt = t; renderPanel(true); renderTrack(); layoutFloaters(); }
+  if (t - (loop.pt || 0) > 800) { loop.pt = t; renderPanel(true); renderTrack(); updateFollowChip(); layoutFloaters(); }
   if (t - (loop.st || 0) > 20000 && running) { loop.st = t; save(); }
 }
 async function pack(txt) {
@@ -220,6 +232,30 @@ let saving = false;
 async function save() { if (saving || !S) return; saving = true; try { const t = await pack(sim.serialize(S)); localStorage.setItem(SAVE, t); } catch (e) { toast('자동 저장 실패(용량)'); } saving = false; }
 
 
+// ---------- 부대 추적 카메라 ----------
+// 전쟁 탭 부대 목록에서 부대를 고르면 카메라가 그 부대의 '화면에 그려진' 위치를 행군·교전·후퇴 동안 따라간다.
+// 지도를 직접 움직이면(드래그·핀치·휠) 추적이 풀려 관전을 방해하지 않고, 부대가 해산하면 알림과 함께 풀린다.
+const ARM_ST = { march: '행군', siege: '포위', battle: '교전', retreat: '후퇴', garrison: '주둔' };
+let followId = -1;
+function followArmy() { return followId >= 0 && S ? (S.armies || []).find((x) => x.id === followId) : null; }
+function startFollow(id) {
+  const a = (S.armies || []).find((x) => x.id === id); if (!a) return;
+  followId = id; R.focusWorld(a.x, a.y, 6); needRefresh = true; updateFollowChip(); panelSig = ''; renderPanel(true);
+  toast('🎥 부대를 따라갑니다 — 지도를 직접 움직이면 추적이 풀립니다');
+}
+function stopFollow(msg) { if (followId < 0) return; followId = -1; updateFollowChip(); panelSig = ''; renderPanel(true); if (msg) toast(msg); }
+function updateFollowChip() {
+  const el = pwEl('armfollow');
+  const a = followArmy();
+  if (!a) { if (!el.classList.contains('hide')) { el.classList.add('hide'); layoutFloaters(); } return; }
+  const an = S.nations[a.nat];
+  el.classList.remove('hide');
+  el.innerHTML = `<span class="armtxt">🎥 <i style="color:rgb(${an ? an.rgb : '120,120,120'})">■</i> ${an ? an.name + ' ' : ''}${an ? unitOf(an).key : '부대'} <b>${a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : Math.round(a.men)}</b> · ${ARM_ST[a.st] || a.st}</span><button id="afOff" title="추적 해제">해제</button>`;
+  el.title = '지도를 직접 움직이면(드래그·확대) 추적이 풀립니다';
+  el.querySelector('#afOff').onclick = () => stopFollow('부대 추적을 해제했습니다');
+  layoutFloaters();
+}
+
 // ---------- 입력 ----------
 function bindInput() {
   const cv = $('map'); const pts = new Map(); let moved = 0, pd = 0;
@@ -228,14 +264,14 @@ function bindInput() {
   cv.addEventListener('pointermove', (e) => {
     if (!pts.has(e.pointerId)) { R.hover = R.provAt(e.clientX, e.clientY); if (selPower) updatePowerPreview(R.hover); return; }
     const o = pts.get(e.pointerId); const dx = e.clientX - o[0], dy = e.clientY - o[1]; pts.set(e.pointerId, [e.clientX, e.clientY]); moved += Math.abs(dx) + Math.abs(dy);
-    if (pts.size === 1) R.pan(dx, dy); else if (pts.size === 2) { const d = dist(); if (pd) { const m = mid(); R.zoomAt(m[0], m[1], d / pd); } pd = d; }
+    if (pts.size === 1) { R.pan(dx, dy); if (moved >= 8) stopFollow(); } else if (pts.size === 2) { const d = dist(); if (pd) { const m = mid(); R.zoomAt(m[0], m[1], d / pd); stopFollow(); } pd = d; }
   });
   const up = (e) => { if (pts.has(e.pointerId) && pts.size === 1 && moved < 8) select(R.provAt(e.clientX, e.clientY)); pts.delete(e.pointerId); pd = 0; };
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', (e) => { pts.delete(e.pointerId); });
-  cv.addEventListener('wheel', (e) => { e.preventDefault(); R.zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+  cv.addEventListener('wheel', (e) => { e.preventDefault(); R.zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0015)); stopFollow(); }, { passive: false });
   const dist = () => { const a = [...pts.values()]; return Math.hypot(a[0][0] - a[1][0], a[0][1] - a[1][1]); };
   const mid = () => { const a = [...pts.values()]; return [(a[0][0] + a[1][0]) / 2, (a[0][1] + a[1][1]) / 2]; };
-  window.addEventListener('keydown', (e) => { if (e.key === ' ') { speed = speed ? 0 : prevSpeed; markBars(); e.preventDefault(); } if (e.key === 'Escape' && selPower) { disarmPower(); toast('권능 선택을 해제했습니다'); } });
+  window.addEventListener('keydown', (e) => { if (e.key === ' ') { speed = speed ? 0 : prevSpeed; markBars(); e.preventDefault(); } if (e.key === 'Escape' && selPower) { disarmPower(); toast('권능 선택을 해제했습니다'); } if (e.key === 'Escape' && followId >= 0) stopFollow('부대 추적을 해제했습니다'); });
 }
 let selPower = null, pwCount = 0;
 // v35 관찰 화면 정리: 미리보기·결과 카드 접기 상태 (접혀도 발동·취소·해제는 유지)
@@ -257,7 +293,7 @@ function pwEl(id) {
     el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);background:#0a1a2bee;border:1px solid #3a5f86;border-radius:12px;padding:8px 14px;z-index:6;font-size:13px;max-width:92vw;text-align:center;box-shadow:0 4px 16px #0008;color:#e8eef5';
   }
   const mob = isMobileLayout();
-  const useTop = mob && id !== 'pwarm'; // 사용 중 칩은 모바일에서도 아래에 둬 추적 카드·미리보기와 겹치지 않게 함
+  const useTop = mob && id !== 'pwarm' && id !== 'armfollow'; // 사용 중·추적 칩은 모바일에서도 아래에 둬 추적 카드·미리보기와 겹치지 않게 함
   const off = !mob && id !== 'pwarm' && selPower ? 52 : 0; // 데스크톱: 권능 사용 중 칩과 겹치지 않게 미리보기·결과 카드를 안쪽으로 내림 (모바일은 layoutFloaters가 정리)
   el.style[useTop ? 'top' : 'bottom'] = ((useTop ? 44 : id === 'pwarm' && mob ? 120 : 84) + off) + 'px';
   el.style[useTop ? 'bottom' : 'top'] = 'auto';
@@ -401,7 +437,7 @@ let logNat = null; // 연대기 탭 국가 필터 (null = 전체)
 let cmpA = -1, cmpB = -1; // 비교 탭의 두 나라 슬롯
 let cmpMetric = 'pop'; // 추이 차트 지표 (pop/pc/stab)
 try { const m = localStorage.getItem('genesis-atlas-cmpmetric'); if (METRICS.some(([k]) => k === m)) cmpMetric = m; } catch (e) {}
-function goTo(p) { if (p == null || p < 0 || !map.provinces[p]) return; R.sel = p; R.paintHL(); R.focus(p, 4); needRefresh = true; if (isMobileLayout()) setPanelOpen(false); }
+function goTo(p) { if (p == null || p < 0 || !map.provinces[p]) return; stopFollow(); R.sel = p; R.paintHL(); R.focus(p, 4); needRefresh = true; if (isMobileLayout()) setPanelOpen(false); }
 const pct = (v) => Math.round(v * 100) + '%';
 function bar(g, e) {
   const sat = e.sat[g], d = e.dem[g]; if (d <= 0 && e.prod[g] <= 0) return '';
@@ -583,13 +619,12 @@ function renderPanel(auto) {
       const aN = As[0] ? As[0].name : '?', dN = Ds[0] ? Ds[0].name : '?';
       h += '<div class="warcard"><div class="whead">⚔ <b>' + aN + '</b>' + (As.length > 1 ? ` 외 ${As.length - 1}개국` : '') + ' 대 <b>' + dN + '</b>' + (Ds.length > 1 ? ` 외 ${Ds.length - 1}개국` : '') + '</div>';
       h += `<div class="wmeta">${yearStr(w.start)} 시작 · ${S.year - w.start}년째 · 점령 ${ca + cd ? `${aN}측 ${ca} · ${dN}측 ${cd} 지방` : '아직 없음'}</div>`;
-      const ST = { march: '행군', siege: '포위', battle: '교전', retreat: '후퇴', garrison: '주둔' };
       const wa = (S.armies || []).filter((a) => a.war === w.id).sort((p, q) => q.men - p.men).slice(0, 6);
       if (wa.length) {
         h += '<div class="armlist">';
         for (const a of wa) {
           const an = S.nations[a.nat]; if (!an) continue; const mo = a.mor == null ? 1 : a.mor;
-          h += `<button class="chip armrow" data-army="${a.id}" style="display:block;width:100%;text-align:left;margin:2px 0"><span style="color:rgb(${an.rgb[0]},${an.rgb[1]},${an.rgb[2]})">■</span> ${an.name} ${unitOf(an).key} <b>${a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : Math.round(a.men)}</b> · ${ST[a.st] || a.st} · 사기 ${Math.round(mo * 100)}%${a.cmd ? ` · ${CMD_TRAITS[a.cmd.t].key} ${a.cmd.n}` : ''}${(a.xp || 0) >= 0.3 ? ' ★' : ''}</button>`;
+          h += `<button class="chip armrow" data-army="${a.id}" style="display:block;width:100%;text-align:left;margin:2px 0">${followId === a.id ? "🎥 " : ""}<span style="color:rgb(${an.rgb[0]},${an.rgb[1]},${an.rgb[2]})">■</span> ${an.name} ${unitOf(an).key} <b>${a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : Math.round(a.men)}</b> · ${ARM_ST[a.st] || a.st} · 사기 ${Math.round(mo * 100)}%${a.cmd ? ` · ${CMD_TRAITS[a.cmd.t].key} ${a.cmd.n}` : ''}${(a.xp || 0) >= 0.3 ? ' ★' : ''}</button>`;
         }
         h += '</div>';
       }
@@ -629,13 +664,13 @@ function renderPanel(auto) {
     h = '<h3>신의 권능</h3><p>권능을 고르면 지도에 영향 범위와 예상 효과가 미리 보입니다. 한 번 고른 권능은 해제할 때까지 여러 지역에 계속 사용할 수 있고, 발동할 때마다 실제 변화를 요약해 보여 줍니다.</p>' + Object.entries(sim.POWERS).map(([k, v]) => `<button class="pw ${selPower === k ? 'on' : ''}" data-p="${k}">${v.name}<small>${v.desc}</small></button>`).join('');
     h += `<button class="pw ${S.auto ? 'on' : ''}" id="autoBtn">자동 신 위임: ${S.auto ? '켜짐' : '꺼짐'}<small>신이 알아서 균형을 맞춥니다.</small></button>`;
   } else {
-    h = '<h3>도움말</h3><p class="fine">드래그로 이동, 휠/핀치로 확대. 지역을 누르면 정보가 나옵니다. 전쟁이 나면 나라가 스스로 부대를 편성해 행군하고 싸웁니다. 위쪽 버튼으로 속도와 지도 모드를 바꾸고, 권능 탭에서 신의 힘을 쓰거나 자동 신 위임을 켜 보세요. 아무것도 하지 않아도 세계는 계속 흘러갑니다.</p><h3>설정</h3><button class="pw" id="bSave">지금 저장</button><button class="pw" id="bExp">파일로 내보내기</button><button class="pw" id="bImp">파일에서 불러오기</button><button class="pw" id="bNew">새 세계 시작</button><input type="file" id="fImp" class="hide" accept=".json">';
+    h = '<h3>도움말</h3><p class="fine">드래그로 이동, 휠/핀치로 확대. 지역을 누르면 정보가 나옵니다. 전쟁이 나면 나라가 스스로 부대를 편성해 행군하고 싸웁니다. 전쟁 탭의 부대 목록에서 부대를 누르면 카메라가 그 부대를 계속 따라가고, 지도를 직접 움직이면 추적이 풀립니다. 위쪽 버튼으로 속도와 지도 모드를 바꾸고, 권능 탭에서 신의 힘을 쓰거나 자동 신 위임을 켜 보세요. 아무것도 하지 않아도 세계는 계속 흘러갑니다.</p><h3>설정</h3><button class="pw" id="bSave">지금 저장</button><button class="pw" id="bExp">파일로 내보내기</button><button class="pw" id="bImp">파일에서 불러오기</button><button class="pw" id="bNew">새 세계 시작</button><input type="file" id="fImp" class="hide" accept=".json">';
     h += '<p class="fine">지도 데이터: Natural Earth (퍼블릭 도메인). 지구 국경은 근사이며 대체 역사입니다.</p>';
   }
   const sig = tab === 'god' ? 'god' + selPower + S.auto : tab + h.length + (tab === 'world' || tab === 'eco' || tab === 'sel' || tab === 'log' || tab === 'cmp' ? Math.floor(S.year / 5) : tab === 'war' ? S.year : '');
   if (auto && sig === panelSig) return;
   panelSig = sig; body.innerHTML = h;
-  for (const a of body.querySelectorAll('[data-n]')) a.onclick = (e) => { e.preventDefault(); const n = S.nations[+a.dataset.n]; R.sel = n.cap; R.paintHL(); R.focus(n.cap, 3); tab = 'sel'; renderPanel(); };
+  for (const a of body.querySelectorAll('[data-n]')) a.onclick = (e) => { e.preventDefault(); stopFollow(); const n = S.nations[+a.dataset.n]; R.sel = n.cap; R.paintHL(); R.focus(n.cap, 3); tab = 'sel'; renderPanel(); };
   for (const a of body.querySelectorAll('[data-w]')) a.onclick = (e) => { e.preventDefault(); setTracking(+a.dataset.w); };
   for (const b of body.querySelectorAll('[data-trk]')) b.onclick = () => setTracking(+b.dataset.trk);
   for (const d of body.querySelectorAll('[data-lp]')) d.onclick = () => goTo(+d.dataset.lp);
@@ -645,7 +680,7 @@ function renderPanel(auto) {
   const q = (id) => body.querySelector('#' + id);
   for (const b of body.querySelectorAll('[data-cmp]')) b.onclick = () => addToCompare(+b.dataset.cmp);
   for (const b of body.querySelectorAll('[data-cmpgo]')) b.onclick = () => goTo(+b.dataset.cmpgo);
-  for (const b of body.querySelectorAll('[data-army]')) b.onclick = () => { const a = (S.armies || []).find((x) => x.id === +b.dataset.army); if (a) { R.focusWorld(a.x, a.y, 6); needRefresh = true; toast('부대 위치로 이동합니다'); } };
+  for (const b of body.querySelectorAll('[data-army]')) b.onclick = () => startFollow(+b.dataset.army);
   for (const b of body.querySelectorAll('[data-warfront]')) b.onclick = () => { const w = S.wars.find((x) => x.id === +b.dataset.warfront); if (focusWar(w)) toast('⚔ 전선으로 이동합니다'); };
   for (const b of body.querySelectorAll('[data-warmap]')) b.onclick = () => { const id = +b.dataset.warmap; if (histWar && histWar.id === id) hideWarView(); else showWarOnMap(id); panelSig = ''; renderPanel(); };
   for (const b of body.querySelectorAll('[data-cmpm]')) b.onclick = () => { cmpMetric = b.dataset.cmpm; try { localStorage.setItem('genesis-atlas-cmpmetric', cmpMetric); } catch (e) {} panelSig = ''; renderPanel(); };
