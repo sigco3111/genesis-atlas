@@ -1115,7 +1115,7 @@ export function restore(json) {
   const S = typeof json === 'string' ? JSON.parse(json) : json;
   if (!S.P.km) S.P.km = new Array(S.P.pop.length).fill(1);
   for (const k of Object.keys(TYPED)) S.P[k] = TYPED[k].from(S.P[k]);
-  const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1; S.recentCaps = S.recentCaps || []; S.warHist = S.warHist || []; S.buffs = S.buffs || []; S.ships = S.ships || []; S.carr = S.carr || []; S.exped = S.exped || []; S.armies = S.armies || []; S.nextArmy = S.nextArmy || 1; S.seaPairs = S.seaPairs || {}; S.landPairs = S.landPairs || {}; ensureEco(S);
+  const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1; S.recentCaps = S.recentCaps || []; S.warHist = S.warHist || []; S.buffs = S.buffs || []; S.ships = S.ships || []; S.carr = S.carr || []; S.exped = S.exped || []; S.armies = S.armies || []; S.nextArmy = S.nextArmy || 1; S.battles = S.battles || []; S.battlesOpen = S.battlesOpen || {}; S.seaPairs = S.seaPairs || {}; S.landPairs = S.landPairs || {}; ensureEco(S);
   for (const w of S.wars) { w.caps = w.caps || []; w.A0 = w.A0 || [...w.A]; w.D0 = w.D0 || [...w.D]; }
   for (const n of S.nations) if (!n.hist || !n.hist.length) n.hist = [[S.year, Math.round(n.pop || 0), n.pc || 0, n.stab == null ? 0.5 : Math.round(n.stab * 1000) / 1000]];
   return S;

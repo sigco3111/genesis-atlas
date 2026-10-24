@@ -7,6 +7,7 @@ import { METRICS, seriesOf, chartMax, commonWindow, changeOf, changeDir, fmtChan
 import { GOODS, NG, resOf, goodCss } from './econ.js';
 import { yearStr, numStr, ERA_NAMES } from './names.js';
 import { unitOf, CMD_TRAITS } from './units.js';
+import { BATTLE_CARDS_MAX } from './battles.js';
 import { followPos, followEase } from './follow.js';
 const $ = (id) => document.getElementById(id);
 const SAVE = 'genesis-atlas-save-v1';
@@ -630,6 +631,27 @@ function renderPanel(auto) {
         h += '</div>';
       }
       h += `<div class="wbtns"><button class="chip" data-warfront="${w.id}">전선으로 이동</button></div></div>`;
+    }
+    h += '<h3>교전 결과</h3>';
+    const bt = (S.battles || []).slice().reverse();
+    if (!bt.length) h += '<p class="fine">아직 기록된 교전이 없습니다. 부대끼리의 교전이 끝나면 양측 손실·승패·후퇴 방향을 여기에 남깁니다.</p>';
+    else {
+      h += '<p class="fine">부대 대 부대, 개별 교전의 기록입니다. 전쟁 전체의 결과는 아래 종전 요약에 정리됩니다.</p>';
+      const bmen = (v) => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : '' + Math.round(v);
+      for (const c of bt.slice(0, 12)) {
+        const wn = c.win === 'a' ? c.an : c.win === 'b' ? c.bn : '';
+        h += `<div class="warcard bcard${c.p >= 0 ? ' hasloc' : ''}"${c.p >= 0 ? ` data-lp="${c.p}" title="눌러서 교전 위치로 이동"` : ''}>`;
+        h += `<div class="whead">⚔ <i style="color:rgb(${c.argb})">■</i> <b>${c.an}</b> 대 <i style="color:rgb(${c.brgb})">■</i> <b>${c.bn}</b></div>`;
+        h += `<div class="wmeta">${yearStr(c.y)}${c.y1 > c.y ? '~' + yearStr(c.y1) : ''}${c.place ? ' · ' + c.place + ' 부근' : ''}</div>`;
+        const brow = (nm2, u, m0, loss) => `<div class="wrow"><span>${nm2}${u ? ' ' + u : ''}</span><b>${bmen(m0)}→${bmen(Math.max(0, m0 - loss))} (<em class="down">-${bmen(loss)}</em>)</b></div>`;
+        h += brow(c.an, c.ua, c.am0, c.al) + brow(c.bn, c.ub, c.bm0, c.bl);
+        let res = c.win ? `승자: ${wn}` : (c.why === 'dead' ? '양측 모두 괴멸' : '승패 없이 흩어짐');
+        if (c.ret && c.win) res += ` · 패주군 ${c.ret} 방면 후퇴`;
+        h += `<div class="wline">${res}</div>`;
+        if (c.ca || c.cb) h += `<div class="wmeta">${c.ca ? CMD_TRAITS[c.ca.t].key + ' ' + c.ca.n : '?'} 대 ${c.cb ? CMD_TRAITS[c.cb.t].key + ' ' + c.cb.n : '?'}</div>`;
+        h += '</div>';
+      }
+      if (bt.length > 12) h += `<p class="fine">최근 ${BATTLE_CARDS_MAX}개의 교전을 보관합니다.</p>`;
     }
     h += '<h3>끝난 전쟁 결과</h3>';
     const wh = (S.warHist || []).slice().reverse();

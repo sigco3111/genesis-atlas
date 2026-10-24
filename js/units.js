@@ -1,6 +1,7 @@
 // 자율 부대 전투: 전쟁 중인 국가가 스스로 부대를 편성해 행군·회전·포위로 싸운다.
 // DOM/Canvas에 의존하지 않는 순수 로직 모듈. 시각화는 render.js가 S.armies를 읽어 처리한다.
 import { findLandPath, pathLen, captureProvince, addLog } from './sim.js';
+import { engTouch, engSweep } from './battles.js';
 
 export const ARMY_GLOBAL_MAX = 70;      // 세계 전체 부대 상한
 export const ARMY_SPEED = 26;           // 1년에 이동하는 지도 픽셀. 무역선(26px/년)과 같은 체감 속도로 낮춰 행군이 여러 해에 걸쳐 눈에 보이게 한다
@@ -303,11 +304,12 @@ export function stepArmies(S, map) {
       if (A.nat === B.nat || !atWar(S, A.nat, B.nat)) continue;
       const d2 = (A.x - B.x) ** 2 + (A.y - B.y) ** 2;
       if (d2 > BATTLE_RANGE * BATTLE_RANGE) continue;
+      const bp = provAt(map, A.x, A.y);
       if (A.st !== 'battle' && B.st !== 'battle' && A.men + B.men > 1600) {
-        const p = provAt(map, A.x, A.y);
-        addLog(S, `${S.nations[A.nat].name}의 ${unitOf(S.nations[A.nat]).key}과(과) ${S.nations[B.nat].name}의 ${unitOf(S.nations[B.nat]).key}이(가) ${S.provName[p] || '한 지방'}에서 격돌했습니다.`, 2, p >= 0 ? p : A.home, A.nat, B.nat);
+        addLog(S, `${S.nations[A.nat].name}의 ${unitOf(S.nations[A.nat]).key}과(과) ${S.nations[B.nat].name}의 ${unitOf(S.nations[B.nat]).key}이(가) ${S.provName[bp] || '한 지방'}에서 격돌했습니다.`, 2, bp >= 0 ? bp : A.home, A.nat, B.nat);
       }
       A.st = 'battle'; B.st = 'battle'; // 포위 진행(sg)은 유지: 전투가 끝나면 포위를 이어간다
+      engTouch(S, A, B, bp); // 교전 결과 카드용 개별 교전 추적
       battleTick(S, map, A, B);
     }
   }
@@ -320,6 +322,8 @@ export function stepArmies(S, map) {
       a.st = backAtSiege ? 'siege' : 'march';
     }
   }
+  // 3.5) 끝난 교전을 결과 카드로 마감 (소멸 부대 정리 전이라 전멸한 쪽의 최종 병력도 잡힌다)
+  engSweep(S, map, provAt, BATTLE_RANGE, (n) => (n ? unitOf(n).key : ''));
   if (S.fields && S.fields.length && S.fields.some((f) => S.year - f.y0 > 35)) S.fields = S.fields.filter((f) => S.year - f.y0 <= 35);
   // 4) 소멸한 부대 정리
   S.armies = S.armies.filter((a) => a.men >= MIN_MEN);
