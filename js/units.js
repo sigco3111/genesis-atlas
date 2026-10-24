@@ -232,7 +232,7 @@ export function stepArmies(S, map) {
     if (!w) { a.men = 0; continue; } // 전쟁이 끝난 부대는 onWarEnd에서 해산됨
     if (a.st === 'battle') continue; // 회전은 아래에서 한 번에 처리
     // 목표 재선정
-    if (a.tgt < 0 || (a.st === 'march' && (!a.path || (a.prog >= a.dlen && P.owner[a.tgt] === a.nat)))) { // 경로가 없으면 소유와 무관하게 목표를 다시 고른다
+    if (a.tgt < 0 || (a.st === 'march' && (!a.path || a.prog >= a.dlen))) { // 경로가 없거나 이미 도달한 상태(포위 해제 직후 등)면 목표를 다시 고른다
       const t = pickTarget(S, map, n, w);
       if (t < 0) { // 더 뺏을 곳이 없으면 귀환
         retreat(S, map, a); a.st = 'garrison'; continue;
