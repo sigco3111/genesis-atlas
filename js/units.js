@@ -39,8 +39,8 @@ export const CMD_TRAITS = [
   { key: '기동장', desc: '기동' }, // 이동 +14%
   { key: '명장', desc: '사기' },   // 사기 하락 -35%
 ];
-export function makeCommander(rng) {
-  return { n: CMD_FAM[rng.int(CMD_FAM.length)] + CMD_GIV[rng.int(CMD_GIV.length)], t: rng.int(CMD_TRAITS.length) };
+export function makeCommander(rng, id) {
+  return { n: CMD_FAM[rng.int(CMD_FAM.length)] + CMD_GIV[rng.int(CMD_GIV.length)], t: rng.int(CMD_TRAITS.length), id }; // id: 전적 추적용 영구 번호 (옛 저장에는 없을 수 있고, 교전 기록 때 부여)
 }
 export const cmdTrait = (a) => (a.cmd ? a.cmd.t : -1);
 
@@ -111,7 +111,7 @@ function muster(S, map, n, w) {
   P.pop[cap] -= men;
   S.armies.push({
     id: S.nextArmy++, nat: n.id, men, men0: men, x: A.ax, y: A.ay,
-    path, dlen: pathLen(path), prog: 0, tgt, home: cap, st: 'march', sg: 0, war: w.id, mor: 1, xp: 0, cmd: makeCommander(rng),
+    path, dlen: pathLen(path), prog: 0, tgt, home: cap, st: 'march', sg: 0, war: w.id, mor: 1, xp: 0, cmd: makeCommander(rng, (S.nextCmd = (S.nextCmd || 1) + 1) - 1),
   });
   return true;
 }

@@ -37,7 +37,7 @@ export function createState(map, opts = {}) {
     P: { pop: new Float32Array(N), tech: new Float32Array(N), owner: new Int16Array(N).fill(-1), cult: new Int16Array(N).fill(-1), rel: new Int16Array(N).fill(-1), unrest: new Float32Array(N), city: new Uint8Array(N), fx: new Float32Array(N).fill(1), km: new Float32Array(N).fill(1), plague: new Uint8Array(N) },
     nations: [], cultures: [], religions: [], wars: [], truce: {}, log: [], hist: [], routes: [], ships: [], carr: [], exped: [], seaPairs: {}, landPairs: {}, cityName: new Array(N).fill(''), provName: new Array(N).fill(''),
     auto: !!opts.auto, aggr: opts.aggr ?? 1, worldFirst: {}, stats: {}, fr: null, nextWar: 1, track: null,
-    recentCaps: [], warHist: [], armies: [], nextArmy: 1,
+    recentCaps: [], warHist: [], armies: [], nextArmy: 1, cmds: [], nextCmd: 1,
     eventsOn: opts.events !== false, deaths: { war: 0, plague: 0, famine: 0 }, fxQueue: [], buffs: [],
   };
   if (S.mode === 'real') initReal(S, map, opts); else initEmergent(S, map, opts);
@@ -1115,7 +1115,7 @@ export function restore(json) {
   const S = typeof json === 'string' ? JSON.parse(json) : json;
   if (!S.P.km) S.P.km = new Array(S.P.pop.length).fill(1);
   for (const k of Object.keys(TYPED)) S.P[k] = TYPED[k].from(S.P[k]);
-  const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1; S.recentCaps = S.recentCaps || []; S.warHist = S.warHist || []; S.buffs = S.buffs || []; S.ships = S.ships || []; S.carr = S.carr || []; S.exped = S.exped || []; S.armies = S.armies || []; S.nextArmy = S.nextArmy || 1; S.battles = S.battles || []; S.battlesOpen = S.battlesOpen || {}; S.seaPairs = S.seaPairs || {}; S.landPairs = S.landPairs || {}; ensureEco(S);
+  const r = new RNG(1); r.s = S.rng; S.rng = r; S.fr = null; S.fxQueue = []; S.techRate = S.techRate ?? 1; S.recentCaps = S.recentCaps || []; S.warHist = S.warHist || []; S.buffs = S.buffs || []; S.ships = S.ships || []; S.carr = S.carr || []; S.exped = S.exped || []; S.armies = S.armies || []; S.nextArmy = S.nextArmy || 1; S.cmds = S.cmds || []; S.nextCmd = S.nextCmd || 1; S.battles = S.battles || []; S.battlesOpen = S.battlesOpen || {}; S.seaPairs = S.seaPairs || {}; S.landPairs = S.landPairs || {}; ensureEco(S);
   for (const w of S.wars) { w.caps = w.caps || []; w.A0 = w.A0 || [...w.A]; w.D0 = w.D0 || [...w.D]; }
   for (const n of S.nations) if (!n.hist || !n.hist.length) n.hist = [[S.year, Math.round(n.pop || 0), n.pc || 0, n.stab == null ? 0.5 : Math.round(n.stab * 1000) / 1000]];
   return S;

@@ -186,4 +186,7 @@ b.bad,.bad{color:#ff8a7a}b.mid,.mid{color:#ffd27a}b.good,.good{color:#8fe3a2}
 @media(max-width:760px){body.panelopen #reslegend{display:none}}
 
 .warcard.bcard.hasloc{cursor:pointer}
+.warcard.cmdview{border-color:#6a8fbd}
+.wmeta .cmdlink{padding:1px 7px;font-size:11px}
+.warcard .chip.armrow.on{border-color:#6a8fbd;background:#16304a}
 .warcard.bcard.hasloc:hover{border-color:#3a5f8a}

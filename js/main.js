@@ -436,6 +436,7 @@ function select(p) {
 const TABS = [['world', '세계'], ['eco', '경제'], ['sel', '선택'], ['cmp', '비교'], ['log', '연대기'], ['war', '전쟁'], ['god', '권능'], ['set', '설정']];
 let panelSig = '';
 let logNat = null; // 연대기 탭 국가 필터 (null = 전체)
+let selCmd = 0; // 전쟁 탭 지휘관 전적에서 상세를 연 지휘관 번호 (0 = 닫힘)
 let cmpA = -1, cmpB = -1; // 비교 탭의 두 나라 슬롯
 let cmpMetric = 'pop'; // 추이 차트 지표 (pop/pc/stab)
 try { const m = localStorage.getItem('genesis-atlas-cmpmetric'); if (METRICS.some(([k]) => k === m)) cmpMetric = m; } catch (e) {}
@@ -648,10 +649,38 @@ function renderPanel(auto) {
         let res = c.win ? `승자: ${wn}` : (c.why === 'dead' ? '양측 모두 괴멸' : '승패 없이 흩어짐');
         if (c.ret && c.win) res += ` · 패주군 ${c.ret} 방면 후퇴`;
         h += `<div class="wline">${res}</div>`;
-        if (c.ca || c.cb) h += `<div class="wmeta">${c.ca ? CMD_TRAITS[c.ca.t].key + ' ' + c.ca.n : '?'} 대 ${c.cb ? CMD_TRAITS[c.cb.t].key + ' ' + c.cb.n : '?'}</div>`;
+        if (c.ca || c.cb) {
+          const cl = (cc) => cc ? (cc.id ? `<button class="chip cmdlink" data-cmd="${cc.id}" title="눌러서 지휘관 전적 보기">${CMD_TRAITS[cc.t].key} ${cc.n}</button>` : CMD_TRAITS[cc.t].key + ' ' + cc.n) : '?';
+          h += `<div class="wmeta">${cl(c.ca)} 대 ${cl(c.cb)}</div>`;
+        }
         h += '</div>';
       }
       if (bt.length > 12) h += `<p class="fine">최근 ${BATTLE_CARDS_MAX}개의 교전을 보관합니다.</p>`;
+    }
+    h += '<h3>지휘관 전적</h3>';
+    const cmen = (v) => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : '' + Math.round(v);
+    const careers = (S.cmds || []).slice().sort((p, q) => (q.b - p.b) || (q.w - p.w) || (p.id - q.id));
+    if (!careers.length) h += '<p class="fine">아직 기록된 지휘관이 없습니다. 부대를 이끈 지휘관이 교전을 치르고 나면 참전·승패·주요 전투가 여기에 쌓입니다.</p>';
+    else {
+      const activeCmd = new Set((S.armies || []).map((a) => a.cmd && a.cmd.id).filter((v) => v != null));
+      h += '<p class="fine">교전이 끝날 때마다 지휘관별로 참전·승패·주요 전투를 누적합니다. 이름을 누르면 상세 기록이 열립니다.</p>';
+      const sel = selCmd ? careers.find((x) => x.id === selCmd) : null;
+      if (sel) {
+        const sn = S.nations[sel.nat];
+        const swr = sel.w + sel.l ? ` · 승률 ${Math.round(sel.w / (sel.w + sel.l) * 100)}%` : '';
+        h += '<div class="warcard cmdview">';
+        h += `<div class="whead">🎖 <b>${CMD_TRAITS[sel.t] ? CMD_TRAITS[sel.t].key + ' ' : ''}${sel.n}</b></div>`;
+        h += `<div class="wmeta"><i style="color:rgb(${sn ? sn.rgb : [140, 150, 160]})">■</i> ${sn ? sn.name : '?'} · ${sel.b}전 ${sel.w}승 ${sel.l}패${swr}${sel.died ? ` · ⚰ ${yearStr(sel.died)} 전사` : activeCmd.has(sel.id) ? ' · 현역' : ''}</div>`;
+        if (!sel.maj.length) h += '<div class="wline">아직 주요 전투 기록이 없습니다.</div>';
+        else h += '<div class="wbig">' + sel.maj.map((mm) => `<div class="${mm.p >= 0 ? 'hasloc' : ''}"${mm.p >= 0 ? ` data-lp="${mm.p}" title="눌러서 위치로 이동"` : ''}>${yearStr(mm.y)} · ${mm.vs}와의 교전 ${mm.r > 0 ? '승리' : mm.r < 0 ? '패배' : '무승부'}${mm.place ? ' · ' + mm.place : ''} (아군 -${cmen(mm.ml)} · 상대 -${cmen(mm.fl)})</div>`).join('') + '</div>';
+        h += '<div class="wbtns"><button class="chip" data-cmd="0">닫기</button></div></div>';
+      }
+      for (const r of careers.slice(0, 10)) {
+        const cn = S.nations[r.nat];
+        const wr2 = r.w + r.l ? ` · 승률 ${Math.round(r.w / (r.w + r.l) * 100)}%` : '';
+        h += `<button class="chip armrow${selCmd === r.id ? ' on' : ''}" data-cmd="${r.id}" style="display:block;width:100%;text-align:left;margin:2px 0"><span style="color:rgb(${cn ? cn.rgb : [140, 150, 160]})">■</span> ${CMD_TRAITS[r.t] ? CMD_TRAITS[r.t].key + ' ' : ''}${r.n} <b>${r.b}전 ${r.w}승 ${r.l}패</b>${wr2}${r.died ? ` · ⚰ ${yearStr(r.died)} 전사` : activeCmd.has(r.id) ? ' · 현역' : ''}</button>`;
+      }
+      if (careers.length > 10) h += `<p class="fine">지휘관 ${careers.length}명의 기록 · 참전이 많은 순으로 10명만 보입니다.</p>`;
     }
     h += '<h3>끝난 전쟁 결과</h3>';
     const wh = (S.warHist || []).slice().reverse();
@@ -704,6 +733,7 @@ function renderPanel(auto) {
   for (const b of body.querySelectorAll('[data-cmp]')) b.onclick = () => addToCompare(+b.dataset.cmp);
   for (const b of body.querySelectorAll('[data-cmpgo]')) b.onclick = () => goTo(+b.dataset.cmpgo);
   for (const b of body.querySelectorAll('[data-army]')) b.onclick = () => startFollow(+b.dataset.army);
+  for (const b of body.querySelectorAll('[data-cmd]')) b.onclick = (e) => { e.stopPropagation(); selCmd = +b.dataset.cmd; panelSig = ''; renderPanel(); if (selCmd) { const el = body.querySelector('.cmdview'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); } };
   for (const b of body.querySelectorAll('[data-warfront]')) b.onclick = () => { const w = S.wars.find((x) => x.id === +b.dataset.warfront); if (focusWar(w)) toast('⚔ 전선으로 이동합니다'); };
   for (const b of body.querySelectorAll('[data-warmap]')) b.onclick = () => { const id = +b.dataset.warmap; if (histWar && histWar.id === id) hideWarView(); else showWarOnMap(id); panelSig = ''; renderPanel(); };
   for (const b of body.querySelectorAll('[data-cmpm]')) b.onclick = () => { cmpMetric = b.dataset.cmpm; try { localStorage.setItem('genesis-atlas-cmpmetric', cmpMetric); } catch (e) {} panelSig = ''; renderPanel(); };

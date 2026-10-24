@@ -1,5 +1,5 @@
 // 교전 결과 카드 테스트: 개시·갱신·마감(후퇴/전멸/이탈), 손실 집계, 상한, 구형 저장 호환, 실제 시뮬레이션 결합
-import { BATTLE_CARDS_MAX, BATTLE_MIN_LOSS, pairKey, engTouch, engSweep } from '../js/battles.js';
+import { BATTLE_CARDS_MAX, BATTLE_MIN_LOSS, CMD_MAJ_MAX, pairKey, engTouch, engSweep } from '../js/battles.js';
 import { loadEarthNode } from './loadearth.mjs';
 import * as sim from '../js/sim.js';
 let fails = 0;
@@ -111,11 +111,52 @@ const mkA = (id, nat, men, x = 0, y = 0) => ({ id, nat, men, men0: men, x, y, st
     const R = sim.restore(sim.serialize(S));
     ok((R.battles || []).length === S.battles.length, `seed ${seed}: 저장·복원 후 카드 유지 (${S.battles.length}장)`);
     for (let i = 0; i < 40; i++) sim.step(R, map); // 복원 후에도 진행
-    delete R.battles; delete R.battlesOpen; // 구형 저장 흉내
+    ok(Array.isArray(R.cmds) && R.cmds.length === (S.cmds || []).length, `seed ${seed}: 저장·복원 후 지휘관 전적 유지 (${(S.cmds || []).length}명)`);
+    delete R.battles; delete R.battlesOpen; delete R.cmds; delete R.nextCmd; // 구형 저장 흉내
     try { for (let i = 0; i < 40; i++) sim.step(R, map); ok(Array.isArray(R.battles) === false || true, `seed ${seed}: 구형 저장 필드 삭제 후 40년 진행 무사고`); }
     catch (e) { ok(false, `seed ${seed}: 구형 저장 진행 예외 - ${e.message}`); }
   }
   ok(made >= 1, `실제 전쟁에서 교전 카드 생성 (${made}/3 시드)`);
+}
+
+// 7) 지휘관 전적: 마감된 교전이 지휘관별 참전·승패·주요 전투로 누적 (옛 저장의 번호 없는 지휘관도 기록)
+{
+  const S = mkS();
+  const A = mkA(1, 0, 3000), B = mkA(2, 1, 3000);
+  S.armies.push(A, B);
+  engTouch(S, A, B, 5);
+  S.year = 104; A.men = 2500; B.men = 900; B.st = 'retreat'; B.tgt = 9;
+  engSweep(S, null, provAt, RANGE, uk);
+  ok(A.cmd.id > 0 && B.cmd.id > 0 && A.cmd.id !== B.cmd.id, '전적: 번호 없는 지휘관도 첫 기록 때 영구 번호 부여');
+  ok(S.cmds && S.cmds.length === 2, '전적 레코드 생성');
+  const ra = S.cmds.find((x) => x.id === A.cmd.id), rb = S.cmds.find((x) => x.id === B.cmd.id);
+  ok(ra.b === 1 && ra.w === 1 && ra.l === 0 && rb.b === 1 && rb.w === 0 && rb.l === 1, '참전·승패 누적');
+  ok(ra.maj.length === 1 && ra.maj[0].r === 1 && rb.maj[0].r === -1 && ra.maj[0].vs === '베타', '주요 전투 결과·상대 기록');
+  ok(S.battles[0].ca.id === A.cmd.id && S.battles[0].cb.id === B.cmd.id, '교전 카드에 지휘관 번호 연결');
+  ok(!ra.died && !rb.died, '후퇴 마감은 전사 아님');
+}
+
+// 8) 전멸 마감은 패자 지휘관을 전사로 남기고, 주요 전투는 합산 손실 큰 순으로 유지
+{
+  const S = mkS();
+  const A = mkA(1, 0, 20000);
+  S.armies.push(A);
+  for (let i = 0; i < 5; i++) {
+    const B = mkA(10 + i, 1, 2000 + i * 400);
+    S.armies.push(B);
+    engTouch(S, A, B, 5);
+    S.year += 3;
+    A.men -= 500 + i * 300; B.men = 0;
+    engSweep(S, null, provAt, RANGE, uk);
+    S.armies = S.armies.filter((x) => x.men > 0);
+  }
+  const ra = S.cmds.find((x) => x.id === A.cmd.id);
+  ok(ra.b === 5 && ra.w === 5 && ra.l === 0, '같은 지휘관의 연속 승리 누적');
+  ok(ra.maj.length === CMD_MAJ_MAX && ra.maj[0].tot >= ra.maj[1].tot && ra.maj[1].tot >= ra.maj[2].tot, `주요 전투는 합산 손실 큰 순 ${CMD_MAJ_MAX}개 유지`);
+  ok(ra.maj[0].tot === (500 + 4 * 300) + (2000 + 4 * 400), '가장 큰 전투가 첫 자리');
+  ok(!ra.died, '승자는 전사 아님');
+  const foes = S.cmds.filter((x) => x.id !== A.cmd.id);
+  ok(foes.length === 5 && foes.every((f) => f.l === 1 && f.died > 0), '전멸한 상대 지휘관은 패배·전사 기록');
 }
 
 console.log(fails ? `FAIL ${fails}` : 'ALL OK');
