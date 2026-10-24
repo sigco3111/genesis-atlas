@@ -3,7 +3,7 @@
 import { findLandPath, pathLen, captureProvince, addLog } from './sim.js';
 
 export const ARMY_GLOBAL_MAX = 70;      // 세계 전체 부대 상한
-export const ARMY_SPEED = 85;           // 1년에 이동하는 지도 픽셀
+export const ARMY_SPEED = 26;           // 1년에 이동하는 지도 픽셀. 무역선(26px/년)과 같은 체감 속도로 낮춰 행군이 여러 해에 걸쳐 눈에 보이게 한다
 export const BATTLE_RANGE = 18;         // 이 거리 안의 적 부대와 회전
 const SIEGE_RANGE = 14;                 // 목표 지방 앵커에 이 만큼 가까우면 포위
 const MIN_MEN = 80;                     // 이보다 적으면 소멸
