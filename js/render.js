@@ -492,7 +492,8 @@ export class Renderer {
           if ((a.path || null) !== sm.path) { sm.path = a.path || null; sm.pprog = 0; } // 경로 교체: 새 경로의 시작점이 이전 위치라 연속
           else if (sm.prog < sm.pprog) sm.pprog = sm.prog; // 진행 리셋 보호
           if (Math.hypot(sm.x - sm.px, sm.y - sm.py) > 260) { sm.px = sm.x; sm.py = sm.y; sm.pprog = sm.prog; } // 진짜 순간이동(두 틱 이상의 거리)만 바로 맞춘다
-        }
+          sm.yr = S.year;
+        } else if (sm.yr !== S.year) { sm.yr = S.year; sm.px = sm.x; sm.py = sm.y; sm.pprog = sm.prog; } // 변화 없이 새 틱이 시작되면 보간 원점을 현재 위치로 맞춘다 (매 틱 되감기 스터터 방지)
         // 렌더 위치: 행군·후퇴 중이면 경로 위를 호장 비율로, 아니면 직선으로 틱 사이를 보간한다
         let rx, ry;
         if ((a.st === 'march' || a.st === 'retreat') && a.path && a.path === sm.path && a.dlen > 0 && sm.prog > sm.pprog) {
@@ -1079,4 +1080,4 @@ function ramp(t, stops, a) {
   const n = stops.length - 1; const f = Math.min(n - 1e-6, Math.max(0, t * n)); const i = Math.floor(f), u = f - i; const A = stops[i], B = stops[i + 1];
   const r = (A[0] + (B[0] - A[0]) * u) | 0, g = (A[1] + (B[1] - A[1]) * u) | 0, b = (A[2] + (B[2] - A[2]) * u) | 0;
   return ((a << 24) | (b << 16) | (g << 8) | r) >>> 0;
-}
+            }
