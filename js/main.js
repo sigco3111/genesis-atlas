@@ -9,6 +9,7 @@ import { yearStr, numStr, ERA_NAMES } from './names.js';
 import { unitOf, CMD_TRAITS } from './units.js';
 import { BATTLE_CARDS_MAX } from './battles.js';
 import { followPos, followEase } from './follow.js';
+import { pickSpectate, spectateLive, SPECTATE_MIN_MEN } from './spectate.js';
 const $ = (id) => document.getElementById(id);
 const SAVE = 'genesis-atlas-save-v1';
 const CAPAGE_PREF = 'genesis-atlas-capage', WARPAUSE_PREF = 'genesis-atlas-warpause';
@@ -80,7 +81,7 @@ function boot() { { const lg = $('reslegend'); if (lg) lg.innerHTML = '<b>자원
   $('start').classList.add('hide');
   R = new Renderer($('map'), map); if (!boot.done) { boot.done = true; bindInput(); window.addEventListener('resize', () => { R.resize(); needRefresh = true; }); requestAnimationFrame(loop); }
   R.capAge = readCapAge(); prevTrkWars = trackedWarIds(S);
-  R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = window.__view || 'political'; R.sel = -1; selPower = null; histWar = null; { const wv0 = $('warview'); if (wv0) wv0.classList.add('hide'); } pwCount = 0; pwPending = null; followId = -1; updateArmChip(); updateFollowChip(); R.trackId = S.track ? S.track.id : -1; cmpA = cmpB = -1; speed = window.__speed ?? 1; running = true; needRefresh = true; buildBars(); renderPanel(); renderTrack();
+  R.terrainKind = map.kind + map.seed; R.fit(); if (R.cssW < 700 && map.kind === 'earth') { R.cam.z = Math.max(R.minZ, R.cssW / 520); R.cam.x = 640; R.cam.y = 190; R.clamp(); } R.mode = window.__view || 'political'; R.sel = -1; selPower = null; histWar = null; { const wv0 = $('warview'); if (wv0) wv0.classList.add('hide'); } pwCount = 0; pwPending = null; followId = -1; specKey = 0; specAuto = false; specReleased.clear(); updateArmChip(); updateFollowChip(); R.trackId = S.track ? S.track.id : -1; cmpA = cmpB = -1; speed = window.__speed ?? 1; running = true; needRefresh = true; buildBars(); renderPanel(); renderTrack();
   let pref = null; try { pref = localStorage.getItem(PANEL_PREF); } catch (e) {}
   setPanelOpen(pref === null ? !isMobileLayout() : pref === '1', false);
   toast('휠·드래그로 이동, 지역을 눌러 살펴보세요');
@@ -201,6 +202,16 @@ function loop(t) { if (!loop.n) console.log('loop1'); loop.n = (loop.n || 0) + 1
     }
     prevTrkWars = cur;
   } else prevTrkWars = [];
+  if (specOn && S) {
+    if (specAuto && specKey && !spectateLive(S, specKey)) stopFollow('주요 전투가 끝나 자동 관전을 마칩니다');
+    if (followId < 0) { // 수동 추적 중이 아닐 때만 새 교전을 잡는다
+      const pick = pickSpectate(S, specReleased);
+      if (pick) {
+        const pa = (S.armies || []).find((x) => x.id === pick.id);
+        if (pa) { followId = pa.id; specKey = pick.key; specAuto = true; R.focusWorld(pa.x, pa.y, 6); needRefresh = true; updateFollowChip(); toast('🎬 주요 전투 자동 관전 — 지도를 직접 움직이면 풀립니다'); }
+      }
+    }
+  }
   if (followId >= 0 && S) {
     const fa = (S.armies || []).find((x) => x.id === followId);
     if (!fa) stopFollow('추적하던 부대가 해산되었습니다');
@@ -239,20 +250,29 @@ async function save() { if (saving || !S) return; saving = true; try { const t =
 // 지도를 직접 움직이면(드래그·핀치·휠) 추적이 풀려 관전을 방해하지 않고, 부대가 해산하면 알림과 함께 풀린다.
 const ARM_ST = { march: '행군', siege: '포위', battle: '교전', retreat: '후퇴', garrison: '주둔' };
 let followId = -1;
+// ---------- 주요 전투 자동 관전 ----------
+// 켜 두면(기본 꺼짐) 양측 합산 초기 병력이 큰 교전이 벌어질 때 카메라가 알아서 그 전장을 따라간다.
+// 지도를 직접 움직이면(드래그·핀치·휠) 그 교전의 관전만 풀리고, 다음 큰 교전은 다시 따라간다.
+const SPECTATE_PREF = 'genesis-atlas-spectate';
+let specOn = false;
+try { specOn = localStorage.getItem(SPECTATE_PREF) === '1'; } catch (e) {}
+let specKey = 0, specAuto = false; // 자동 관전 중인 교전 키와 표시 (수동 추적🎥과 구분해 🎬로 보여 줌)
+const specReleased = new Set(); // 이용자가 직접 놓아준 교전: 다시 자동으로 잡지 않음
 function followArmy() { return followId >= 0 && S ? (S.armies || []).find((x) => x.id === followId) : null; }
 function startFollow(id) {
   const a = (S.armies || []).find((x) => x.id === id); if (!a) return;
+  specKey = 0; specAuto = false; // 부대 목록에서 직접 고른 수동 추적이 자동 관전을 대신한다
   followId = id; R.focusWorld(a.x, a.y, 6); needRefresh = true; updateFollowChip(); panelSig = ''; renderPanel(true);
   toast('🎥 부대를 따라갑니다 — 지도를 직접 움직이면 추적이 풀립니다');
 }
-function stopFollow(msg) { if (followId < 0) return; followId = -1; updateFollowChip(); panelSig = ''; renderPanel(true); if (msg) toast(msg); }
+function stopFollow(msg) { if (followId < 0) return; followId = -1; if (specAuto && specKey) specReleased.add(specKey); specKey = 0; specAuto = false; updateFollowChip(); panelSig = ''; renderPanel(true); if (msg) toast(msg); }
 function updateFollowChip() {
   const el = pwEl('armfollow');
   const a = followArmy();
   if (!a) { if (!el.classList.contains('hide')) { el.classList.add('hide'); layoutFloaters(); } return; }
   const an = S.nations[a.nat];
   el.classList.remove('hide');
-  el.innerHTML = `<span class="armtxt">🎥 <i style="color:rgb(${an ? an.rgb : '120,120,120'})">■</i> ${an ? an.name + ' ' : ''}${an ? unitOf(an).key : '부대'} <b>${a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : Math.round(a.men)}</b> · ${ARM_ST[a.st] || a.st}</span><button id="afOff" title="추적 해제">해제</button>`;
+  el.innerHTML = `<span class="armtxt">${specAuto ? '🎬 자동 관전 · ' : '🎥 '}<i style="color:rgb(${an ? an.rgb : '120,120,120'})">■</i> ${an ? an.name + ' ' : ''}${an ? unitOf(an).key : '부대'} <b>${a.men >= 1000 ? (a.men / 1000).toFixed(1) + 'k' : Math.round(a.men)}</b> · ${ARM_ST[a.st] || a.st}</span><button id="afOff" title="추적 해제">해제</button>`;
   el.title = '지도를 직접 움직이면(드래그·확대) 추적이 풀립니다';
   el.querySelector('#afOff').onclick = () => stopFollow('부대 추적을 해제했습니다');
   layoutFloaters();
@@ -613,7 +633,9 @@ function renderPanel(auto) {
     } else { logNat = null; entries = S.log.slice(-80).reverse(); }
     h += '<div class="log">' + entries.map((l) => `<div class="i${l.i}${l.p >= 0 ? ' hasloc' : ''}"${l.p >= 0 ? ` data-lp="${l.p}" title="눌러서 위치로 이동"` : ''}>${yearStr(l.y)} · ${l.t}</div>`).join('') + '</div>';
   } else if (tab === 'war') {
-    h = '<h3>진행 중인 전쟁</h3>';
+    h = `<div class="wbtns"><button class="chip ${specOn ? 'on' : ''}" id="specBtn">🎬 주요 전투 자동 관전 ${specOn ? '켜짐' : '꺼짐'}</button></div>`;
+    h += `<p class="fine">켜 두면 양측 합산 초기 병력 ${SPECTATE_MIN_MEN / 1000}천 명 이상의 큰 교전이 벌어질 때 카메라가 알아서 따라갑니다. 지도를 직접 움직이면 그 교전의 관전만 풀리고, 다음 큰 교전은 다시 따라갑니다.</p>`;
+    h += '<h3>진행 중인 전쟁</h3>';
     if (!S.wars.length) h += '<p class="fine">지금은 전쟁이 없습니다.</p>';
     for (const w of S.wars) {
       const side = (ids) => ids.map((i) => S.nations[i]).filter((n) => n && n.alive);
@@ -716,7 +738,7 @@ function renderPanel(auto) {
     h = '<h3>신의 권능</h3><p>권능을 고르면 지도에 영향 범위와 예상 효과가 미리 보입니다. 한 번 고른 권능은 해제할 때까지 여러 지역에 계속 사용할 수 있고, 발동할 때마다 실제 변화를 요약해 보여 줍니다.</p>' + Object.entries(sim.POWERS).map(([k, v]) => `<button class="pw ${selPower === k ? 'on' : ''}" data-p="${k}">${v.name}<small>${v.desc}</small></button>`).join('');
     h += `<button class="pw ${S.auto ? 'on' : ''}" id="autoBtn">자동 신 위임: ${S.auto ? '켜짐' : '꺼짐'}<small>신이 알아서 균형을 맞춥니다.</small></button>`;
   } else {
-    h = '<h3>도움말</h3><p class="fine">드래그로 이동, 휠/핀치로 확대. 지역을 누르면 정보가 나옵니다. 전쟁이 나면 나라가 스스로 부대를 편성해 행군하고 싸웁니다. 전쟁 탭의 부대 목록에서 부대를 누르면 카메라가 그 부대를 계속 따라가고, 지도를 직접 움직이면 추적이 풀립니다. 위쪽 버튼으로 속도와 지도 모드를 바꾸고, 권능 탭에서 신의 힘을 쓰거나 자동 신 위임을 켜 보세요. 아무것도 하지 않아도 세계는 계속 흘러갑니다.</p><h3>설정</h3><button class="pw" id="bSave">지금 저장</button><button class="pw" id="bExp">파일로 내보내기</button><button class="pw" id="bImp">파일에서 불러오기</button><button class="pw" id="bNew">새 세계 시작</button><input type="file" id="fImp" class="hide" accept=".json">';
+    h = '<h3>도움말</h3><p class="fine">드래그로 이동, 휠/핀치로 확대. 지역을 누르면 정보가 나옵니다. 전쟁이 나면 나라가 스스로 부대를 편성해 행군하고 싸웁니다. 전쟁 탭의 부대 목록에서 부대를 누르면 카메라가 그 부대를 계속 따라가고, 지도를 직접 움직이면 추적이 풀립니다. `주요 전투 자동 관전`을 켜 두면 큰 교전이 벌어질 때 카메라가 알아서 그 전장을 따라갑니다. 위쪽 버튼으로 속도와 지도 모드를 바꾸고, 권능 탭에서 신의 힘을 쓰거나 자동 신 위임을 켜 보세요. 아무것도 하지 않아도 세계는 계속 흘러갑니다.</p><h3>설정</h3><button class="pw" id="bSave">지금 저장</button><button class="pw" id="bExp">파일로 내보내기</button><button class="pw" id="bImp">파일에서 불러오기</button><button class="pw" id="bNew">새 세계 시작</button><input type="file" id="fImp" class="hide" accept=".json">';
     h += '<p class="fine">지도 데이터: Natural Earth (퍼블릭 도메인). 지구 국경은 근사이며 대체 역사입니다.</p>';
   }
   const sig = tab === 'god' ? 'god' + selPower + S.auto : tab + h.length + (tab === 'world' || tab === 'eco' || tab === 'sel' || tab === 'log' || tab === 'cmp' ? Math.floor(S.year / 5) : tab === 'war' ? S.year : '');
@@ -744,6 +766,7 @@ function renderPanel(auto) {
   if (q('cmpAddSel')) q('cmpAddSel').onclick = () => { if (R.sel >= 0 && S.P.owner[R.sel] >= 0) addToCompare(S.P.owner[R.sel]); };
   if (q('cmpAddTrk')) q('cmpAddTrk').onclick = () => { if (S.track) addToCompare(S.track.id); };
   if (q('autoBtn')) q('autoBtn').onclick = () => { S.auto = !S.auto; panelSig = ''; renderPanel(); };
+  if (q('specBtn')) q('specBtn').onclick = () => { specOn = !specOn; try { localStorage.setItem(SPECTATE_PREF, specOn ? '1' : '0'); } catch (e) {} if (!specOn && specAuto) stopFollow('자동 관전을 껐습니다'); else toast(specOn ? '주요 전투 자동 관전을 켰습니다' : '주요 전투 자동 관전을 껐습니다'); panelSig = ''; renderPanel(); };
   if (q('bSave')) q('bSave').onclick = () => { save(); toast('저장했습니다'); };
   if (q('bNew')) q('bNew').onclick = () => { running = false; $('start').classList.remove('hide'); };
   if (q('bExp')) q('bExp').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([sim.serialize(S)], { type: 'application/json' })); a.download = 'genesis-atlas-save.json'; a.click(); };
