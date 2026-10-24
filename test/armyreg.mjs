@@ -44,7 +44,12 @@ for (const seed of [3, 7]) {
       const P = map.provinces[a.cap];
       const mk = (id, men) => ({ id, nat: a.id, men, men0: men, x: P.ax, y: P.ay, path: null, dlen: 0, prog: 0, tgt: a.cap, home: a.cap, st: 'garrison', sg: 0, war: w.id, mor: 0.5, xp: 0.2 });
       R.armies.push(mk(9101, m1), mk(9102, m2));
+      // 합류만 격리해 보려고 시험 단계에서는 새 편성을 막는다: 모든 수도 인구를 잠시 0으로 두면
+      // 편성 조건(P.pop[cap] < men*2.5)이 막혀 적군 교전·아군 합류 끼어듦이 없어진다 (rng 무관하게 결정적)
+      const P0 = R.P; const capList = R.nations.filter((n) => n && n.alive && n.cap >= 0).map((n) => n.cap);
+      const popSave = capList.map((c) => P0.pop[c]); for (const c of capList) P0.pop[c] = 0;
       const before = m1 + m2; stepArmies(R, map);
+      capList.forEach((c, i) => { P0.pop[c] = popSave[i]; });
       const mine = R.armies.filter((x) => x.id === 9101 || x.id === 9102 && x.men > 0).filter((x) => x.men > 0);
       const after = mine.reduce((s, x) => s + x.men, 0);
       if (before <= 7000) { if (mine.length === 1 && after >= before - 1e-6 && after - before < 800 && mine[0].men0 >= before && mine[0].mor > 0.5 && mine[0].mor <= 1) mergedN++; else bad++; }
