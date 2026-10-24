@@ -84,5 +84,12 @@ ok(cityBudget(1.0) === 0 && cityBudget(2.0) === 4 && cityBudget(3.0) === 10 && c
   ok(!placed.some((q) => q.id === 2), '자리 없는 일반 부대는 라벨 생략');
 }
 
+// 9) 도시 라벨 상자(extraBoxes)를 장애물로 피해 배치
+{
+  const opts = { chipW: 30, chipUp: 18, chipDown: 11, downY: 23, upY: 25, gapY: 10.5, extraBoxes: [[70, 115, 130, 131]] }; // 아래 첫 자리(123)를 덮는 도시 라벨
+  const placed = planArmyLabels([{ id: 1, x: 100, y: 100, w: 30, size: 10, men: 5000, tx: '5.0k' }], opts);
+  ok(placed.length === 1 && placed[0].y !== 123, '도시 라벨과 겹치는 자리는 건너뛰고 다음 자리 (got ' + (placed[0] && placed[0].y) + ')');
+}
+
 console.log(fails ? fails + ' failures' : 'all label tests passed');
 process.exit(fails ? 1 : 0);

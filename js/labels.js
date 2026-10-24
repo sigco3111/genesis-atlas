@@ -54,6 +54,7 @@ export function planLabels(cands, budget, opts = {}) {
 //   chipW/chipUp/chipDown: 칩+깃발+막대 상자 (중심 기준 너비·위·아래 거리)
 //   downY/upY: 칩 중심에서 아래/위 첫 후보 라벨 중심까지 거리
 //   gapY: 후보 사이 세로 간격, budget: 추적 외 라벨 최대 수 (기본 무제한)
+//   extraBoxes: 추가 장애물 상자 배열(도시 라벨 등) — 이 상자와도 겹치지 않게 놓는다
 // 반환: [{ id, x, y, tx, follow }] — y는 라벨 중심. 자리가 없으면 생략하고,
 //        추적 부대만 첫 자리에 강제 배치한다.
 export function planArmyLabels(items, opts = {}) {
@@ -63,9 +64,11 @@ export function planArmyLabels(items, opts = {}) {
   const budget = opts.budget == null ? Infinity : opts.budget;
   const chipBoxes = items.map((it) => [it.x - chipW / 2, it.y - chipUp, it.x + chipW / 2, it.y + chipDown]);
   const labBoxes = [];
+  const extra = opts.extraBoxes || [];
   const hit = (b) => {
     for (const q of chipBoxes) if (!(b[2] < q[0] || b[0] > q[2] || b[3] < q[1] || b[1] > q[3])) return true;
     for (const q of labBoxes) if (!(b[2] < q[0] || b[0] > q[2] || b[3] < q[1] || b[1] > q[3])) return true;
+    for (const q of extra) if (!(b[2] < q[0] || b[0] > q[2] || b[3] < q[1] || b[1] > q[3])) return true;
     return false;
   };
   const box = (it, ly) => [it.x - it.w / 2 - 2, ly - it.size / 2 - 1, it.x + it.w / 2 + 2, ly + it.size / 2 + 1];

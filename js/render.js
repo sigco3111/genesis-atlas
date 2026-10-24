@@ -463,7 +463,9 @@ export class Renderer {
         }
       }
     }
-    for (const q of planLabels(cityCands, cityBudget(rel))) {
+    const placedCity = planLabels(cityCands, cityBudget(rel));
+    this._clBoxes = placedCity.map((q) => [q.x - q.w / 2 - 2, q.y - q.size / 2 - 1, q.x + q.w / 2 + 2, q.y + q.size / 2 + 1]); // 부대 라벨이 피할 도시 라벨 상자
+    for (const q of placedCity) {
       ctx.font = `600 ${q.size}px "Noto Sans KR", system-ui, sans-serif`;
       ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.fillStyle = q.gold ? '#ffe9a8' : '#fff';
       ctx.strokeText(q.t, q.x, q.y); ctx.fillText(q.t, q.x, q.y);
@@ -624,7 +626,7 @@ export class Renderer {
           litems.push({ id: a.id, x: px, y: py, w: ctx.measureText(tx).width, size: fsL, men: a.men, follow: it === followIt, tx });
         }
         const budget = litems.length > 6 ? 5 : Infinity;
-        for (const q of planArmyLabels(litems, { chipW: bw, chipUp: ss * 1.8, chipDown: ss * 1.1, downY: ss * 2.0 + fsL * 0.35, upY: ss * 2.5, gapY: fsL * 1.05, budget })) labPlaced.set(q.id, q);
+        for (const q of planArmyLabels(litems, { chipW: bw, chipUp: ss * 1.8, chipDown: ss * 1.1, downY: ss * 2.0 + fsL * 0.35, upY: ss * 2.5, gapY: fsL * 1.05, budget, extraBoxes: this._clBoxes })) labPlaced.set(q.id, q);
       }
       items.sort((p, q) => q.a.men - p.a.men);
       for (const it of items) {
